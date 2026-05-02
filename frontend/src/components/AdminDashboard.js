@@ -15,6 +15,7 @@ const AdminDashboard = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [deleteModal, setDeleteModal] = useState({ show: false, evaluationId: null });
 
   useEffect(() => {
     fetchDashboardData();
@@ -46,6 +47,25 @@ const AdminDashboard = () => {
     pendingEvaluations: 5,
     totalSubmissions: 234
   });
+
+  const handleDeleteEvaluation = async () => {
+    if (!deleteModal.evaluationId) return;
+    
+    try {
+      await api.delete(`/admin/evaluations/${deleteModal.evaluationId}`);
+      toast.success('Evaluation deleted successfully');
+      setEvaluations(evaluations.filter(e => e._id !== deleteModal.evaluationId));
+      setStats({ ...stats, totalEvaluations: stats.totalEvaluations - 1 });
+    } catch (error) {
+      toast.error('Failed to delete evaluation');
+    } finally {
+      setDeleteModal({ show: false, evaluationId: null });
+    }
+  };
+
+  const confirmDelete = (id) => {
+    setDeleteModal({ show: true, evaluationId: id });
+  };
 
   if (loading) {
     return (
@@ -191,6 +211,7 @@ const AdminDashboard = () => {
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submissions</th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -217,6 +238,14 @@ const AdminDashboard = () => {
                       {evaluation.submissions?.length === evaluation.assignedStudents?.length ? 'Complete' : 'Pending'}
                     </span>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <button
+                      onClick={() => confirmDelete(evaluation._id)}
+                      className="text-red-600 hover:text-red-800 font-medium px-3 py-1 rounded hover:bg-red-50 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -233,6 +262,39 @@ const AdminDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+            <div className="text-center">
+              <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Delete Evaluation?</h3>
+              <p className="text-gray-600 mb-6">
+                This action cannot be undone. All submissions and student data associated with this evaluation will be removed.
+              </p>
+              <div className="flex space-x-3 justify-center">
+                <button
+                  onClick={() => setDeleteModal({ show: false, evaluationId: null })}
+                  className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteEvaluation}
+                  className="px-6 py-3 bg-red-600 text-white font-medium rounded-xl hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

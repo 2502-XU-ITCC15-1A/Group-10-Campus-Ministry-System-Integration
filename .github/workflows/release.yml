@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release Type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - alpha
+          - beta
+      version:
+        description: 'Version (e.g., 1.0.0)'
+        required: false
+
+env:
+  NODE_VERSION: '18.x'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event.inputs.version }}" != "" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Get latest tag
+            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            VERSION_TYPE="${{ github.event.inputs.release_type }}"
+            
+            # Parse version
+            MAJOR=$(echo $LAST_TAG | cut -d. -f1 | tr -d 'v')
+            MINOR=$(echo $LAST_TAG | cut -d. -f2)
+            PATCH=$(echo $LAST_TAG | cut -d. -f3)
+            
+            case $VERSION_TYPE in
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              alpha)
+                VERSION="${MAJOR}.${MINOR}.${PATCH}-alpha.1"
+                echo "version=$VERSION" >> $GITHUB_OUTPUT
+                echo "::set-output name=version::$VERSION"
+                exit 0
+                ;;
+              beta)
+                VERSION="${MAJOR}.${MINOR}.${PATCH}-beta.1"
+                echo "version=$VERSION" >> $GITHUB_OUTPUT
+                echo "::set-output name=version::$VERSION"
+                exit 0
+                ;;
+            esac
+            
+            VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "::set-output name=version::$VERSION"
+      
+      - name: Create tag
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag ${{ steps.version.outputs.version }}
+          git push origin ${{ steps.version.outputs.version }}
+      
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: Release ${{ steps.version.outputs.version }}
+          draft: true
+          prerelease: ${{ contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') }}
+          body: |
+            ## Changes in this release:
+            
+            - [ ] New features
+            - [ ] Bug fixes
+            - [ ] Breaking changes
+            
+            ## Known Issues:
+            
+            - List any known issues here
+            
+            ## Installation:
+            
+            For staging deployment, merge to staging branch.
+            
+            ### Docker Deployment:
+            ```bash
+            docker-compose up -d
+            ```
+      - name: Upload Release Assets
+        run: |
+          echo "Release ${{ steps.version.outputs.version }} created!"
+          echo "Please add release notes and upload any additional assets manually."
+
+  notify:
+    name: Notify Release
+    runs-on: ubuntu-latest
+    needs: release
+    
+    steps:
+      - name: Discord Notification
+        if: always()
+        uses: distribution/github-actions-notifier@v1
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          username: GitHub Actions

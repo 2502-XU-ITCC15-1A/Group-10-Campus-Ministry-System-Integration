@@ -40,12 +40,22 @@ router.post('/evaluations', [auth, adminAuth], async (req, res) => {
       };
     });
 
+    const batch = req.body.batch || 'General';
+    let assignedStudents = req.body.assignedStudents || [];
+    
+    // Auto-assign students based on batch if no specific students selected
+    if (assignedStudents.length === 0 && batch && batch !== 'General') {
+      const batchStudents = await User.find({ role: 'student', batch: batch }).select('_id');
+      assignedStudents = batchStudents.map(s => s._id);
+      console.log(`🎯 Auto-assigning ${assignedStudents.length} students from batch: ${batch}`);
+    }
+
     const evaluationData = {
       title: req.body.title,
       description: req.body.description || '',
       questions: cleanQuestions,
-      assignedStudents: req.body.assignedStudents || [],
-      batch: req.body.batch || 'General',
+      assignedStudents: assignedStudents,
+      batch: batch,
       dueDate: new Date(req.body.dueDate),
       createdBy: req.user.id
     };
@@ -58,12 +68,12 @@ router.post('/evaluations', [auth, adminAuth], async (req, res) => {
     console.log(`🎉 Evaluation created: ${evaluation._id}`);
 
     // Assign to students
-    if (evaluationData.assignedStudents && evaluationData.assignedStudents.length > 0) {
+    if (assignedStudents && assignedStudents.length > 0) {
       await User.updateMany(
-        { _id: { $in: evaluationData.assignedStudents } },
+        { _id: { $in: assignedStudents } },
         { $addToSet: { assignedEvaluations: evaluation._id } }
       );
-      console.log(`👥 Assigned to ${evaluationData.assignedStudents.length} students`);
+      console.log(`👥 Assigned to ${assignedStudents.length} students`);
     }
 
     const populatedEval = await Evaluation.findById(evaluation._id)
@@ -92,6 +102,31 @@ router.get('/evaluations', [auth, adminAuth], async (req, res) => {
     res.json(evaluations);
   } catch (error) {
     console.error('Get evaluations error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete evaluation
+router.delete('/evaluations/:id', [auth, adminAuth], async (req, res) => {
+  try {
+    const evaluation = await Evaluation.findById(req.params.id);
+    if (!evaluation) {
+      return res.status(404).json({ message: 'Evaluation not found' });
+    }
+
+    // Remove evaluation from all students' assignedEvaluations
+    await User.updateMany(
+      { assignedEvaluations: req.params.id },
+      { $pull: { assignedEvaluations: req.params.id } }
+    );
+
+    // Delete the evaluation
+    await Evaluation.findByIdAndDelete(req.params.id);
+
+    console.log(`🗑️ Evaluation deleted: ${req.params.id}`);
+    res.json({ message: 'Evaluation deleted successfully' });
+  } catch (error) {
+    console.error('Delete evaluation error:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -171,6 +206,33 @@ router.get('/students', [auth, adminAuth], async (req, res) => {
     res.json(students);
   } catch (error) {
     console.error('Students error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get all users
+router.get('/users', [auth, adminAuth], async (req, res) => {
+  try {
+    const users = await User.find()
+      .select('fullName email role batch createdAt')
+      .sort({ createdAt: -1 });
+    res.json(users);
+  } catch (error) {
+    console.error('Users error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get certificates
+router.get('/certificates', [auth, adminAuth], async (req, res) => {
+  try {
+    const certificates = await Certificate.find()
+      .populate('student', 'fullName studentId')
+      .populate('issuedBy', 'fullName')
+      .sort({ createdAt: -1 });
+    res.json(certificates);
+  } catch (error) {
+    console.error('Certificates error:', error);
     res.status(500).json({ message: error.message });
   }
 });

@@ -10,13 +10,17 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
     if (token) {
       try {
         const decoded = jwtDecode(token);
-        setUser(decoded);
+        // Use stored user data if available, otherwise use decoded token data
+        const userData = storedUser ? JSON.parse(storedUser) : decoded;
+        setUser(userData);
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       } catch (error) {
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
       }
     }
     setLoading(false);
@@ -24,12 +28,14 @@ export const AuthProvider = ({ children }) => {
 
   const login = (userData) => {
     localStorage.setItem('token', userData.token);
+    localStorage.setItem('user', JSON.stringify(userData.user));
     setUser(userData.user);
     api.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`;
   };
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setUser(null);
     delete api.defaults.headers.common['Authorization'];
   };

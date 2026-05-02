@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import api from '../services/api';
@@ -8,8 +8,30 @@ const EvaluationBuilder = () => {
   const [students, setStudents] = useState([]);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingStudents, setLoadingStudents] = useState(true);
+  const [batchFilter, setBatchFilter] = useState('');
 
   const { register, handleSubmit, reset } = useForm();
+
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  // Filter students by selected batch
+  const filteredStudents = batchFilter 
+    ? students.filter(s => s.batch === batchFilter)
+    : students;
+
+  const fetchStudents = async () => {
+    try {
+      const response = await api.get('/admin/students');
+      setStudents(response.data || []);
+    } catch (error) {
+      console.error('Failed to fetch students:', error);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
 
   const addQuestion = () => {
     setQuestions([...questions, { 
@@ -77,13 +99,38 @@ const EvaluationBuilder = () => {
                 placeholder="e.g., Recollection Feedback Form"
               />
             </div>
-            <div>
-              <label className="block text-lg font-semibold mb-3">Batch *</label>
-              <input
+<div>
+              <label className="block text-lg font-semibold mb-3">Course & Year *</label>
+              <select
                 {...register('batch', { required: true })}
                 className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., BSIT-1A"
-              />
+              >
+                <option value="">Select Course & Year</option>
+                <optgroup label="BSIT - Bachelor of Science in IT">
+                  <option value="BSIT-1">BSIT - 1st Year</option>
+                  <option value="BSIT-2">BSIT - 2nd Year</option>
+                  <option value="BSIT-3">BSIT - 3rd Year</option>
+                  <option value="BSIT-4">BSIT - 4th Year</option>
+                </optgroup>
+                <optgroup label="BSCS - Bachelor of Science in Computer Science">
+                  <option value="BSCS-1">BSCS - 1st Year</option>
+                  <option value="BSCS-2">BSCS - 2nd Year</option>
+                  <option value="BSCS-3">BSCS - 3rd Year</option>
+                  <option value="BSCS-4">BSCS - 4th Year</option>
+                </optgroup>
+                <optgroup label="BSIS - Bachelor of Science in Information Systems">
+                  <option value="BSIS-1">BSIS - 1st Year</option>
+                  <option value="BSIS-2">BSIS - 2nd Year</option>
+                  <option value="BSIS-3">BSIS - 3rd Year</option>
+                  <option value="BSIS-4">BSIS - 4th Year</option>
+                </optgroup>
+                <optgroup label="ABCom - AB Communication">
+                  <option value="ABCom-1">ABCom - 1st Year</option>
+                  <option value="ABCom-2">ABCom - 2nd Year</option>
+                  <option value="ABCom-3">ABCom - 3rd Year</option>
+                  <option value="ABCom-4">ABCom - 4th Year</option>
+                </optgroup>
+              </select>
             </div>
             <div className="md:col-span-2">
               <label className="block text-lg font-semibold mb-3">Description</label>
@@ -176,6 +223,96 @@ const EvaluationBuilder = () => {
             </div>
           </div>
 
+{/* Student Selection */}
+          <div className="p-8 bg-gray-50 rounded-2xl">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Assign Students</h2>
+            {loadingStudents ? (
+              <div className="animate-pulse flex items-center justify-center h-32">
+                <div className="text-gray-500">Loading students...</div>
+              </div>
+            ) : students.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No students registered yet. Students will need to register first.
+              </div>
+            ) : (
+              <>
+                {/* Batch Filter */}
+                <div className="mb-4 flex flex-wrap items-center gap-3">
+                  <label className="text-sm font-medium text-gray-700">Filter by Batch:</label>
+                  <select
+                    value={batchFilter}
+                    onChange={(e) => setBatchFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Batches ({students.length} students)</option>
+                    <option value="BSIT-1">BSIT - 1st Year</option>
+                    <option value="BSIT-2">BSIT - 2nd Year</option>
+                    <option value="BSIT-3">BSIT - 3rd Year</option>
+                    <option value="BSIT-4">BSIT - 4th Year</option>
+                    <option value="BSCS-1">BSCS - 1st Year</option>
+                    <option value="BSCS-2">BSCS - 2nd Year</option>
+                    <option value="BSCS-3">BSCS - 3rd Year</option>
+                    <option value="BSCS-4">BSCS - 4th Year</option>
+                    <option value="BSIS-1">BSIS - 1st Year</option>
+                    <option value="BSIS-2">BSIS - 2nd Year</option>
+                    <option value="BSIS-3">BSIS - 3rd Year</option>
+                    <option value="BSIS-4">BSIS - 4th Year</option>
+                    <option value="ABCom-1">ABCom - 1st Year</option>
+                    <option value="ABCom-2">ABCom - 2nd Year</option>
+                    <option value="ABCom-3">ABCom - 3rd Year</option>
+                    <option value="ABCom-4">ABCom - 4th Year</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStudents(filteredStudents.map(s => s._id))}
+                    className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-full hover:bg-blue-200"
+                  >
+                    Select Filtered ({filteredStudents.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStudents([])}
+                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300"
+                  >
+                    Clear All
+                  </button>
+                  <span className="ml-2 text-sm text-gray-600 self-center">
+                    {selectedStudents.length} selected
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
+                  {filteredStudents.map((student) => (
+                    <label
+                      key={student._id}
+                      className={`flex items-center p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                        selectedStudents.includes(student._id)
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedStudents.includes(student._id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedStudents([...selectedStudents, student._id]);
+                          } else {
+                            setSelectedStudents(selectedStudents.filter(id => id !== student._id));
+                          }
+                        }}
+                        className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                      />
+                      <div className="ml-3">
+                        <p className="font-medium text-gray-900">{student.fullName}</p>
+                        <p className="text-sm text-gray-500">{student.studentId}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Submit Button */}
           <div className="pt-8 border-t border-gray-200 flex justify-center">
             <button
@@ -183,7 +320,7 @@ const EvaluationBuilder = () => {
               disabled={loading}
               className="px-16 py-4 bg-gradient-to-r from-blue-600 to-blue-600 text-white text-xl font-bold rounded-2xl hover:from-blue-700 hover:to-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500 transition-all disabled:opacity-50 shadow-2xl hover:shadow-3xl"
             >
-              {loading ? 'Creating...' : 'Create Evaluation'}
+              {loading ? 'Creating...' : 'Create & Post Evaluation'}
             </button>
           </div>
         </form>

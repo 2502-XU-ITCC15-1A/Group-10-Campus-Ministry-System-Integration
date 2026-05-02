@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import api from '../services/api';
@@ -7,24 +7,77 @@ import api from '../services/api';
 const EvaluationForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [evaluation, setEvaluation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const { register, handleSubmit, formState: { errors } } = useForm();
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const { register, handleSubmit, formState: { errors }, getValues, reset } = useForm();
 
   useEffect(() => {
     fetchEvaluation();
+    // Auto-save draft every 30 seconds
+    const autoSaveInterval = setInterval(() => {
+      saveDraft();
+    }, 30000);
+    return () => clearInterval(autoSaveInterval);
   }, [id]);
+
+  // Handle browser back button
+  useEffect(() => {
+    const handlePopState = (event) => {
+      event.preventDefault();
+      setShowExitModal(true);
+    };
+    window.history.pushState(null, null, window.location.href);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const fetchEvaluation = async () => {
     try {
       const response = await api.get(`/evaluation/${id}`);
       setEvaluation(response.data);
+      // Load saved draft if exists
+      const savedDraft = localStorage.getItem(`draft_${id}`);
+      if (savedDraft) {
+        const draftData = JSON.parse(savedDraft);
+        reset(draftData);
+        setDraftSaved(true);
+        toast.success('Draft restored from previous session');
+      }
     } catch (error) {
       toast.error('Failed to load evaluation');
       navigate('/student/dashboard');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveDraft = async () => {
+    try {
+      const formData = getValues();
+      localStorage.setItem(`draft_${id}`, JSON.stringify(formData));
+      setDraftSaved(true);
+      toast.success('Draft saved automatically');
+    } catch (error) {
+      console.error('Draft save error:', error);
+    }
+  };
+
+  const handleExitClick = () => {
+    setShowExitModal(true);
+  };
+
+  const confirmExit = () => {
+    setShowExitModal(false);
+    // Determine where to go based on previous location
+    const fromAdmin = location.state?.from === 'admin';
+    if (fromAdmin) {
+      navigate('/admin/dashboard');
+    } else {
+      navigate('/student/dashboard');
     }
   };
 
@@ -57,7 +110,28 @@ const EvaluationForm = () => {
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
         <div className="bg-white shadow-2xl rounded-3xl p-12">
+          {/* X Button for Exit */}
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={handleExitClick}
+              className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+              title="Exit Evaluation"
+            >
+              <svg className="w-6 h-6 text-gray-500 hover:text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
           <div className="text-center mb-12">
+            {draftSaved && (
+              <div className="mb-4 inline-flex items-center px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full">
+                <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" />
+                </svg>
+                Draft saved
+              </div>
+            )}
             <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-blue-600 bg-clip-text text-transparent mb-4">
               {evaluation.title}
             </h1>
@@ -132,13 +206,22 @@ const EvaluationForm = () => {
             ))}
 
             <div className="flex justify-between pt-8 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => navigate('/student/dashboard')}
-                className="px-8 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                Back to Dashboard
-              </button>
+              <div className="flex space-x-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/student/dashboard')}
+                  className="px-8 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  Back to Dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={saveDraft}
+                  className="px-8 py-3 border border-yellow-300 text-yellow-700 font-medium rounded-xl hover:bg-yellow-50 transition-colors"
+                >
+                  Save Draft
+                </button>
+              </div>
               <button
                 type="submit"
                 disabled={submitting}
@@ -148,6 +231,39 @@ const EvaluationForm = () => {
               </button>
             </div>
           </form>
+
+          {/* Exit Confirmation Modal */}
+          {showExitModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+                <div className="text-center">
+                  <div className="mx-auto w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Exit Evaluation?</h3>
+                  <p className="text-gray-600 mb-6">
+                    Your progress has been auto-saved. You can continue later from where you left off.
+                  </p>
+                  <div className="flex space-x-3 justify-center">
+                    <button
+                      onClick={() => setShowExitModal(false)}
+                      className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors"
+                    >
+                      Continue
+                    </button>
+                    <button
+                      onClick={confirmExit}
+                      className="px-6 py-3 bg-red-600 text-white font-medium rounded-xl hover:bg-red-700 transition-colors"
+                    >
+                      Exit
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

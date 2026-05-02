@@ -11,12 +11,20 @@ const StudentDashboard = () => {
   const [dashboardData, setDashboardData] = useState({
     announcements: [],
     pendingEvaluations: [],
+    availableEvaluations: [],
     certificates: []
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
+    // Prevent back button
+    window.history.pushState(null, '', window.location.href);
+    const handlePopState = () => {
+      window.history.pushState(null, '', window.location.href);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const fetchDashboardData = async () => {
@@ -28,6 +36,16 @@ const StudentDashboard = () => {
       console.error('Dashboard error:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEnroll = async (evaluationId) => {
+    try {
+      await api.post(`/student/evaluations/${evaluationId}/enroll`);
+      toast.success('Successfully enrolled!');
+      fetchDashboardData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to enroll');
     }
   };
 
@@ -92,6 +110,39 @@ const StudentDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Available Evaluations for Enrollment */}
+      {dashboardData.availableEvaluations && dashboardData.availableEvaluations.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-xl p-8 mb-12">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">
+            📋 Available Evaluations
+            <span className="ml-2 bg-blue-100 text-blue-800 text-sm font-semibold px-3 py-1 rounded-full">
+              {dashboardData.availableEvaluations.length}
+            </span>
+          </h2>
+          <div className="space-y-4">
+            {dashboardData.availableEvaluations.map((evaluation) => (
+              <div key={evaluation._id} className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-bold text-lg text-gray-900">{evaluation.title}</h3>
+                    <p className="text-gray-600 mt-1">{evaluation.description}</p>
+                    <p className="text-sm text-gray-500 mt-2">
+                      📅 Due: {new Date(evaluation.dueDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleEnroll(evaluation._id)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Enroll
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Certificates */}
       <div className="bg-white rounded-2xl shadow-xl p-8">
