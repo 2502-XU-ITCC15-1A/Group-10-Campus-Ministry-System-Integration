@@ -5,7 +5,7 @@ A comprehensive web-based system for managing student evaluations, certificates,
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-## 🚀 Features
+## Features
 
 ### Core Features
 - **User Authentication** - Secure login with role-based access (Admin/Student)
@@ -24,7 +24,7 @@ A comprehensive web-based system for managing student evaluations, certificates,
 - ✅ **Logout Confirmation** - Professional logout confirmation modal
 - ✅ **Post Evaluation to Students** - Proper evaluation assignment to students
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Installation](#installation)
 2. [Environment Setup](#environment-setup)
@@ -36,7 +36,7 @@ A comprehensive web-based system for managing student evaluations, certificates,
 8. [Contributing](#contributing)
 9. [License](#license)
 
-## 🛠️ Installation
+## Installation
 
 ### Prerequisites
 - Node.js 18.x or higher
@@ -63,7 +63,7 @@ cd frontend
 npm install
 ```
 
-## ⚙️ Environment Setup
+## Environment Setup
 
 ### Backend Environment Variables
 Create a `.env` file in the `backend` directory:
@@ -90,7 +90,7 @@ Create a `.env` file in the `frontend` directory:
 REACT_APP_API_URL=http://localhost:5000/api
 ```
 
-## 🏃 Running the Application
+## Running the Application
 
 ### Development Mode
 
@@ -125,7 +125,7 @@ After running the seed script:
 - **Admin**: admin@xavier.edu.ph / admin123
 - **Student**: student1@xavier.edu.ph / password123
 
-## ☁️ Deployment
+## Deployment
 
 ### Staging Environment
 
@@ -167,7 +167,7 @@ git merge develop
 git push origin staging
 ```
 
-## 📚 API Documentation
+## API Documentation
 
 ### Authentication Endpoints
 
@@ -201,7 +201,7 @@ git push origin staging
 |--------|----------|-------------|
 | GET | `/api/evaluation/:id` | Get evaluation details |
 
-## 🧪 Testing
+## Testing
 
 ### Running Tests
 ```bash
@@ -219,7 +219,7 @@ npm test
 - Component tests for React components
 - Integration tests for user flows
 
-## 📦 Release History
+## Release History
 
 ### v1.1.0 (Current)
 - ✅ Added X button to exit evaluations
@@ -238,7 +238,7 @@ npm test
 - ✅ Certificate generation
 - ✅ Basic dashboard
 
-## 🔧 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -252,11 +252,11 @@ npm test
 - `staging` - Staging/deployment code
 - `feature/*` - Feature branches
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Xavier University Ateneo de Cagayan
 - Campus Ministry Department
@@ -264,7 +264,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-<p align="center">Made with ❤️ by the eCMS Team</p>
+<p align="center">Made by the eCMS Team</p>
 =======
 Campus Ministry E-Certification System (eCMS)
 
