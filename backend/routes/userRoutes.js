@@ -88,6 +88,13 @@ const adminOrFacultyAuth = (req, res, next) => {
   next();
 };
 
+const adminFacultyOrAssistantAuth = (req, res, next) => {
+  if (!['admin', 'staff', 'student_assistant'].includes(req.user.role)) {
+    return res.status(403).json({ message: 'Admin, formator, or student assistant access required' });
+  }
+  next();
+};
+
 const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const getFacultyScope = async (req) => {
@@ -288,12 +295,20 @@ const normalizeRole = (role = '') => {
   const value = String(role).toLowerCase();
   if (value === 'admin') return 'admin';
   if (value === 'staff' || value === 'formator') return 'staff';
+  if (value === 'student_assistant' || value === 'student assistant' || value === 'assistant') return 'student_assistant';
   return 'student';
 };
 
 const MAIN_ADMIN_EMAIL = 'dfabela@xu.edu.ph';
+const managedAccountRoles = ['admin', 'staff'];
+const studentRecordRoles = ['student', 'student_assistant'];
 
 const isMainAdminAccount = (user = {}) => String(user.email || '').toLowerCase() === MAIN_ADMIN_EMAIL;
+
+const validateManagedAccountEmail = (email, role) => {
+  const normalizedEmail = String(email || '').toLowerCase();
+  return normalizedEmail.endsWith('@xu.edu.ph');
+};
 
 const splitName = (fullName = '') => {
   const parts = String(fullName).trim().split(/\s+/).filter(Boolean);
@@ -488,7 +503,7 @@ router.delete('/certificate-templates/:id', [auth, adminOrFacultyAuth], async (r
 router.get('/student-profile/:studentId', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const student = await User.findOne({
-      role: 'student',
+      role: { $in: studentRecordRoles },
       studentId: req.params.studentId
     })
       .populate({
@@ -831,7 +846,7 @@ router.post('/certificates', [auth, adminOrFacultyAuth], async (req, res) => {
 });
 
 // Verify certificate QR code
-router.post('/certificates/verify', [auth, adminOrFacultyAuth], async (req, res) => {
+router.post('/certificates/verify', [auth, adminFacultyOrAssistantAuth], async (req, res) => {
   try {
     const { code } = req.body;
     const scannedCode = String(code || '').trim();
@@ -1018,7 +1033,7 @@ router.get('/export-csv', [auth, adminAuth], async (req, res) => {
 router.get('/students', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const { batch, yearLevel, completionStatus } = req.query;
-    const query = { role: 'student' };
+    const query = { role: { $in: studentRecordRoles } };
 
     if (batch) {
       query.batch = { $regex: `^${escapeRegex(batch)}` };
@@ -1027,7 +1042,7 @@ router.get('/students', [auth, adminOrFacultyAuth], async (req, res) => {
     }
 
     let students = await User.find(query)
-      .select('fullName firstName lastName studentId email batch college department major yearStanding certificates')
+      .select('fullName firstName lastName studentId email role batch college department major yearStanding certificates')
       .sort({ fullName: 1 })
       .limit(200)
       .lean();
@@ -1113,6 +1128,14 @@ router.post('/users', [auth, adminAuth], async (req, res) => {
 
     const displayName = fullName || username;
     const accountRole = normalizeRole(role);
+    if (!managedAccountRoles.includes(accountRole)) {
+      return res.status(400).json({ message: 'Please select a valid system account role' });
+    }
+    if (!validateManagedAccountEmail(email, accountRole)) {
+      return res.status(400).json({
+        message: 'Admin and formator accounts must use @xu.edu.ph email'
+      });
+    }
     const newUser = new User({
       fullName: displayName,
       email: String(email).toLowerCase(),
@@ -1121,7 +1144,7 @@ router.post('/users', [auth, adminAuth], async (req, res) => {
       status: ['active', 'inactive'].includes(status) ? status : 'active',
       department: department || '',
       batch: batch || '',
-      studentId: accountRole === 'student' ? req.body.studentId || `STU${Date.now()}` : req.body.studentId || `USR${Date.now()}`
+      studentId: req.body.studentId || `USR${Date.now()}`
     });
 
     await newUser.save();
@@ -1161,10 +1184,20 @@ router.put('/users/:id', [auth, adminAuth], async (req, res) => {
       }
     }
 
+    const normalizedRole = role ? normalizeRole(role) : user.role;
+    if (role && !managedAccountRoles.includes(normalizedRole)) {
+      return res.status(400).json({ message: 'Please select a valid system account role' });
+    }
+    if (email && !validateManagedAccountEmail(email, normalizedRole)) {
+      return res.status(400).json({
+        message: 'Admin and formator accounts must use @xu.edu.ph email'
+      });
+    }
+
     const updates = {
       ...(fullName || username ? { fullName: fullName || username } : {}),
       ...(email ? { email: String(email).toLowerCase() } : {}),
-      ...(role ? { role: normalizeRole(role) } : {}),
+      ...(role ? { role: normalizedRole } : {}),
       ...(status && ['active', 'inactive'].includes(status) ? { status } : {}),
       ...(department !== undefined ? { department } : {}),
       ...(batch !== undefined ? { batch } : {})
@@ -1248,7 +1281,7 @@ router.put('/students/:id', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const { college, department, major, email, firstName, lastName, yearStanding } = req.body;
     const student = await User.findById(req.params.id);
-    if (!student || student.role !== 'student') return res.status(404).json({ message: 'Student not found' });
+    if (!student || !studentRecordRoles.includes(student.role)) return res.status(404).json({ message: 'Student not found' });
 
     const names = splitName(req.body.fullName || student.fullName);
     student.college = college ?? student.college;
@@ -1269,9 +1302,37 @@ router.put('/students/:id', [auth, adminOrFacultyAuth], async (req, res) => {
   }
 });
 
+router.patch('/students/:id/assistant-role', [auth, adminAuth], async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const student = await User.findById(req.params.id);
+    if (!student || !studentRecordRoles.includes(student.role)) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    if (!String(student.email || '').toLowerCase().endsWith('@my.xu.edu.ph')) {
+      return res.status(400).json({ message: 'Student assistant must use a student @my.xu.edu.ph email' });
+    }
+
+    student.role = enabled ? 'student_assistant' : 'student';
+    await student.save();
+
+    res.json({
+      _id: student._id,
+      role: student.role,
+      fullName: student.fullName,
+      email: student.email,
+      studentId: student.studentId
+    });
+  } catch (error) {
+    console.error('Update student assistant role error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 router.delete('/students/:id', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
-    const student = await User.findOneAndDelete({ _id: req.params.id, role: 'student' });
+    const student = await User.findOneAndDelete({ _id: req.params.id, role: { $in: studentRecordRoles } });
     if (!student) return res.status(404).json({ message: 'Student not found' });
     res.json({ message: 'Student deleted successfully' });
   } catch (error) {

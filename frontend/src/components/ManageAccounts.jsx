@@ -19,6 +19,8 @@ const displayRole = (role) => {
   return role || 'Formator';
 };
 
+const accountRoles = ['admin', 'staff'];
+
 const ManageAccounts = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,12 +28,13 @@ const ManageAccounts = () => {
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState({ open: false, mode: 'add', user: null });
   const [confirmChange, setConfirmChange] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [formData, setFormData] = useState(emptyAccount);
 
   const fetchUsers = async () => {
     try {
       const response = await api.get('/admin/users');
-      setUsers((response.data || []).filter((user) => ['admin', 'staff'].includes(user.role)));
+      setUsers((response.data || []).filter((user) => accountRoles.includes(user.role)));
     } catch (error) {
       toast.error('Failed to load accounts');
     } finally {
@@ -62,7 +65,7 @@ const ManageAccounts = () => {
       email: user.email || '',
       password: '',
       confirmPassword: '',
-      role: user.role === 'admin' ? 'admin' : 'staff',
+      role: accountRoles.includes(user.role) ? user.role : 'staff',
       status: user.status || 'active'
     });
     setModal({ open: true, mode: 'edit', user });
@@ -72,6 +75,7 @@ const ManageAccounts = () => {
     setFormData(emptyAccount);
     setModal({ open: false, mode: 'add', user: null });
     setConfirmChange(null);
+    setDeleteTarget(null);
   };
 
   const validateForm = () => {
@@ -80,7 +84,7 @@ const ManageAccounts = () => {
       return false;
     }
 
-    if (!['admin', 'staff'].includes(formData.role)) {
+    if (!accountRoles.includes(formData.role)) {
       toast.error('Please select a valid account role');
       return false;
     }
@@ -132,7 +136,7 @@ const ManageAccounts = () => {
   const getSensitiveChanges = () => {
     if (modal.mode !== 'edit' || !modal.user) return [];
     const changes = [];
-    const currentRole = modal.user.role === 'admin' ? 'admin' : 'staff';
+    const currentRole = accountRoles.includes(modal.user.role) ? modal.user.role : 'staff';
     const currentStatus = modal.user.status || 'active';
 
     if (formData.role !== currentRole) {
@@ -163,11 +167,12 @@ const ManageAccounts = () => {
     await saveAccount(payload);
   };
 
-  const handleDelete = async (userId) => {
-    if (!window.confirm('Delete this user? This cannot be undone.')) return;
+  const handleDelete = async () => {
+    if (!deleteTarget?._id) return;
     try {
-      await api.delete(`/admin/users/${userId}`);
+      await api.delete(`/admin/users/${deleteTarget._id}`);
       toast.success('User deleted successfully');
+      setDeleteTarget(null);
       fetchUsers();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to delete user');
@@ -235,7 +240,7 @@ const ManageAccounts = () => {
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
                       <button onClick={() => openEdit(user)} className="mr-4 font-semibold text-[#3a53a5] hover:underline">Edit</button>
                       <button
-                        onClick={() => handleDelete(user._id)}
+                        onClick={() => setDeleteTarget(user)}
                         disabled={isMainAdmin(user)}
                         className="font-semibold text-red-600 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline"
                       >
@@ -320,6 +325,30 @@ const ManageAccounts = () => {
                 className="bg-[#3a53a5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2a3a85] disabled:opacity-60"
               >
                 {saving ? 'Saving...' : 'Confirm Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
+              <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M4.93 19h14.14a2 2 0 001.73-3L13.73 4a2 2 0 00-3.46 0L3.2 16a2 2 0 001.73 3z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Delete Account?</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Are you sure you want to delete {deleteTarget.fullName || deleteTarget.email || 'this account'}? This cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button type="button" onClick={handleDelete} className="bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                Delete Account
               </button>
             </div>
           </div>

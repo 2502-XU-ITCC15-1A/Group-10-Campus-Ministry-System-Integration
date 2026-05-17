@@ -48,7 +48,7 @@ const accountEmailRules = {
   student: {
     label: 'Students',
     domains: ['@my.xu.edu.ph'],
-    roles: ['student']
+    roles: ['student', 'student_assistant']
   }
 };
 

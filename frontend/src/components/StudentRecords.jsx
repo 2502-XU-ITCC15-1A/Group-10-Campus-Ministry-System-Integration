@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { AuthContext } from '../context/AuthContext';
 
 const emptyStudent = {
   studentId: '',
@@ -80,6 +81,8 @@ const getCollegeForStudent = (student) => {
 
 const StudentRecords = () => {
   const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
+  const canManageAssistantRole = user?.role === 'admin';
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -88,6 +91,7 @@ const StudentRecords = () => {
   const [selectedCollege, setSelectedCollege] = useState(null);
   const [modal, setModal] = useState({ open: false, mode: 'add', student: null });
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [roleTarget, setRoleTarget] = useState(null);
   const [formData, setFormData] = useState(emptyStudent);
 
   const fetchStudents = async () => {
@@ -207,6 +211,22 @@ const StudentRecords = () => {
     }
   };
 
+  const handleAssistantRoleChange = async () => {
+    if (!roleTarget?._id) return;
+    const nextEnabled = roleTarget.role !== 'student_assistant';
+    setSaving(true);
+    try {
+      await api.patch(`/admin/students/${roleTarget._id}/assistant-role`, { enabled: nextEnabled });
+      toast.success(nextEnabled ? 'Student assistant role assigned' : 'Student assistant role removed');
+      setRoleTarget(null);
+      fetchStudents();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update student role');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="-m-6 flex min-h-screen items-center justify-center bg-[#edf0f7]">
@@ -226,7 +246,7 @@ const StudentRecords = () => {
           <section className="rounded-lg bg-white p-6 shadow-lg">
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-gray-900">Colleges</h2>
-              <p className="text-sm text-gray-500">Select a college to view and manage its student records.</p>
+              <p className="text-sm text-gray-500">Select a college to view student records.</p>
             </div>
             <div className="grid grid-cols-1 gap-4 text-center sm:grid-cols-2 lg:grid-cols-4">
               {colleges.map((college) => (
@@ -306,7 +326,7 @@ const StudentRecords = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Student ID', 'Last Name', 'First Name', 'Department', 'Year Standing', 'Certificates', 'Actions'].map((heading) => (
+                  {['Student ID', 'Last Name', 'First Name', 'Department', 'Year Standing', 'Role', 'Certificates', 'Actions'].map((heading) => (
                     <th key={heading} className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">{heading}</th>
                   ))}
                 </tr>
@@ -327,9 +347,23 @@ const StudentRecords = () => {
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{student.firstName || student.fullName}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{student.department || '-'}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{student.yearStanding || '-'}</td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <span className={`rounded px-3 py-1 text-xs font-semibold ${
+                        student.role === 'student_assistant'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {student.role === 'student_assistant' ? 'Student Assistant' : 'Student'}
+                      </span>
+                    </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{student.certificateCount || 0}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
                       <button onClick={() => openEdit(student)} className="mr-4 font-semibold text-[#3a53a5] hover:underline">Edit</button>
+                      {canManageAssistantRole && (
+                        <button onClick={() => setRoleTarget(student)} className="mr-4 font-semibold text-[#3a53a5] hover:underline">
+                          {student.role === 'student_assistant' ? 'Make Student' : 'Make Assistant'}
+                        </button>
+                      )}
                       <button onClick={() => setDeleteTarget(student)} className="font-semibold text-red-600 hover:underline">Delete</button>
                     </td>
                   </tr>
@@ -395,6 +429,34 @@ const StudentRecords = () => {
               </button>
               <button type="button" onClick={handleDelete} className="bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
                 Delete Student
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {roleTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#edf0f7] text-[#3a53a5]">
+              <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A8.966 8.966 0 0112 15c2.21 0 4.236.797 5.803 2.119M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">
+              {roleTarget.role === 'student_assistant' ? 'Remove Student Assistant Role?' : 'Assign Student Assistant Role?'}
+            </h2>
+            <p className="mt-2 text-sm text-gray-600">
+              {roleTarget.role === 'student_assistant'
+                ? `${roleTarget.fullName || roleTarget.email} will return to a regular student account.`
+                : `${roleTarget.fullName || roleTarget.email} will keep the same student password and gain certificate verification access.`}
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button type="button" onClick={() => setRoleTarget(null)} disabled={saving} className="border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60">
+                Cancel
+              </button>
+              <button type="button" onClick={handleAssistantRoleChange} disabled={saving} className="bg-[#3a53a5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2a3a85] disabled:opacity-60">
+                {saving ? 'Saving...' : 'Confirm'}
               </button>
             </div>
           </div>

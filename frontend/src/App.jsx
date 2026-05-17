@@ -162,6 +162,12 @@ function AppContent() {
               <NavLink to="/admin/certificates" className={navLinkClass}>Generate Certificate</NavLink>
               <NavLink to="/admin/certificate-scan" className={navLinkClass}>Verify Certificate</NavLink>
             </>
+          ) : user.role === 'student_assistant' ? (
+            <>
+              <NavLink to="/student/dashboard" className={navLinkClass}>Dashboard</NavLink>
+              <NavLink to="/student/profile" className={navLinkClass}>Student Profile</NavLink>
+              <NavLink to="/admin/certificate-scan" className={navLinkClass}>Verify Certificate</NavLink>
+            </>
           ) : (
             <>
               <NavLink to="/student/dashboard" className={navLinkClass}>Dashboard</NavLink>
@@ -183,7 +189,7 @@ function AppContent() {
         <header className="flex h-[70px] items-center justify-end border-b border-gray-200 bg-white px-6 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="font-medium">{user.fullName}</span>
-            <span className="text-sm capitalize text-gray-500">({user.role === 'staff' ? 'formator' : user.role})</span>
+            <span className="text-sm capitalize text-gray-500">({user.role === 'staff' ? 'formator' : user.role === 'student_assistant' ? 'student assistant' : user.role})</span>
           </div>
         </header>
 
@@ -193,7 +199,7 @@ function AppContent() {
             <Route
               path="/student/dashboard"
               element={
-                <ProtectedRoute role="student">
+                <ProtectedRoute role={['student', 'student_assistant']}>
                   <StudentDashboard />
                 </ProtectedRoute>
               }
@@ -201,7 +207,7 @@ function AppContent() {
             <Route
               path="/student/profile"
               element={
-                <ProtectedRoute role="student">
+                <ProtectedRoute role={['student', 'student_assistant']}>
                   <StudentProfile />
                 </ProtectedRoute>
               }
@@ -283,7 +289,7 @@ function AppContent() {
             <Route
               path="/admin/certificate-scan"
               element={
-                <ProtectedRoute role={['admin', 'staff']}>
+                <ProtectedRoute role={['admin', 'staff', 'student_assistant']}>
                   <CertificateScanner />
                 </ProtectedRoute>
               }

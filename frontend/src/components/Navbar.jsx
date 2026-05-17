@@ -47,7 +47,7 @@ const Navbar = () => {
           </div>
           
           <div className="flex items-center space-x-2">
-            {user.role === 'student' ? (
+            {user.role === 'student' || user.role === 'student_assistant' ? (
               <>
                 {!isOnStudentDashboard && (
                   <Link
@@ -96,7 +96,7 @@ const Navbar = () => {
               </div>
               <div className="hidden md:block">
                 <p className="text-sm font-medium text-white">{user.fullName}</p>
-                <p className="text-xs text-yellow-400 capitalize">{user.role}</p>
+                <p className="text-xs text-yellow-400 capitalize">{user.role === 'student_assistant' ? 'student assistant' : user.role}</p>
               </div>
             </div>
             
