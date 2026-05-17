@@ -30,7 +30,7 @@ const accountOptions = [
     id: 'student',
     title: 'Students',
     helper: 'Use your @my.xu.edu.ph account',
-    placeholder: '20230028369@my.xu.edu.ph',
+    placeholder: 'student@my.xu.edu.ph',
     allowedDomains: ['@my.xu.edu.ph'],
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.42A12.08 12.08 0 0112 20.5a12.08 12.08 0 01-6.16-9.92L12 14z" />
@@ -73,15 +73,39 @@ const Login = () => {
   const ensureSelectedEmailAllowed = (email) => {
     const error = getEmailError(email);
     if (error) {
-      toast.error(error);
+      showLoginError(error);
       return false;
     }
     return true;
   };
 
+  const showLoginError = (message) => {
+    toast.error(message, {
+      position: 'top-center',
+      style: {
+        minWidth: '320px',
+        textAlign: 'center',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }
+    });
+  };
+
+  const showLoginSuccess = (message) => {
+    toast.success(message, {
+      position: 'top-center',
+      style: {
+        minWidth: '320px',
+        textAlign: 'center',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }
+    });
+  };
+
   const completeLogin = (data) => {
     if (!data || !data.token || !data.user) {
-      toast.error('Invalid server response');
+      showLoginError('Invalid server response');
       return;
     }
 
@@ -97,8 +121,8 @@ const Login = () => {
       : data.user.role === 'staff'
         ? '/formator/dashboard'
         : '/student/dashboard';
-    toast.success('Welcome to eCMS!');
-    navigate(targetPath);
+    showLoginSuccess('Welcome to eCMS!');
+    navigate(targetPath, { replace: true });
   };
 
   const handleSubmit = async (e) => {
@@ -115,13 +139,13 @@ const Login = () => {
       completeLogin(response.data);
     } catch (error) {
       if (error.code === 'ECONNREFUSED') {
-        toast.error('Cannot connect to server. Is backend running?');
+        showLoginError('Cannot connect to server. Is backend running?');
       } else if (error.response?.status === 401) {
-        toast.error('Invalid email or password');
+        showLoginError('Invalid email or password');
       } else if (error.response?.data?.message) {
-        toast.error(error.response.data.message);
+        showLoginError(error.response.data.message);
       } else {
-        toast.error('Login failed');
+        showLoginError('Login failed');
       }
     } finally {
       setLoading(false);
@@ -130,7 +154,7 @@ const Login = () => {
 
   const handleGoogleSuccess = async ({ credential }) => {
     if (!currentAccount) {
-      toast.error('Please select an account type first');
+      showLoginError('Please select an account type first');
       return;
     }
 
@@ -144,9 +168,9 @@ const Login = () => {
       completeLogin(response.data);
     } catch (error) {
       if (error.response?.data?.message) {
-        toast.error(error.response.data.message);
+        showLoginError(error.response.data.message);
       } else {
-        toast.error('Google login failed');
+        showLoginError('Google login failed');
       }
     } finally {
       setGoogleLoading(false);
@@ -176,9 +200,9 @@ const Login = () => {
         setResetData((current) => ({ ...current, token: response.data.resetToken }));
         setResetCodeReady(true);
       }
-      toast.success(response.data?.message || 'Password reset code generated');
+      showLoginSuccess(response.data?.message || 'Password reset code generated');
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to prepare password reset');
+      showLoginError(error.response?.data?.message || 'Failed to prepare password reset');
     } finally {
       setForgotLoading(false);
     }
@@ -188,7 +212,7 @@ const Login = () => {
     e.preventDefault();
 
     if (resetData.password !== resetData.confirmPassword) {
-      toast.error('Passwords do not match');
+      showLoginError('Passwords do not match');
       return;
     }
 
@@ -198,11 +222,11 @@ const Login = () => {
         token: resetData.token,
         password: resetData.password
       });
-      toast.success(response.data?.message || 'Password reset successful');
+      showLoginSuccess(response.data?.message || 'Password reset successful');
       setFormData({ email: resetData.email, password: '' });
       setForgotModalOpen(false);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to reset password');
+      showLoginError(error.response?.data?.message || 'Failed to reset password');
     } finally {
       setResetLoading(false);
     }
@@ -213,7 +237,7 @@ const Login = () => {
     setFormData({ email: '', password: '' });
     setUsePasswordLogin(false);
     if (!googleConfigured) {
-      toast.error('Google login needs a client ID. Use password login for now.');
+      showLoginError('Google login needs a client ID. Use password login for now.');
       setUsePasswordLogin(true);
     }
   };
@@ -232,7 +256,7 @@ const Login = () => {
           <div className="relative z-10 w-full max-w-lg rounded-2xl bg-[#24366f] p-7 text-center text-white shadow-2xl sm:p-9">
             <div className="text-center">
               <img className="mx-auto h-24 w-full object-contain pb-2" src="/assets/CMO_Seal.png" alt="CMO Seal" />
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/75">Campus Ministry</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/75">Campus Ministries</p>
               <h1 className="pb-3 pt-1 text-xl font-semibold text-white">Log in to eCMS</h1>
             </div>
 
@@ -258,11 +282,6 @@ const Login = () => {
                   </button>
                 ))}
 
-                <div className="pt-4 text-center">
-                  <Link to="/register" className="text-sm font-semibold text-white/90 hover:text-white hover:underline">
-                    Create a new eCMS account
-                  </Link>
-                </div>
               </div>
             ) : (
               <div className="mt-1">
@@ -287,7 +306,7 @@ const Login = () => {
                     <p className="mb-3 text-sm font-semibold text-white/85">Continue with your Xavier Google account</p>
                     <GoogleLogin
                       onSuccess={handleGoogleSuccess}
-                      onError={() => toast.error('Google login failed')}
+                      onError={() => showLoginError('Google login failed')}
                       text="signin_with"
                       shape="rectangular"
                       size="large"
@@ -358,17 +377,10 @@ const Login = () => {
 
                 <div className="mx-auto mt-5 w-full border-t border-white/15 pt-4 text-center sm:w-3/4">
                   <p className="text-sm font-semibold text-white">Test Accounts</p>
-                  <p className="mt-1 text-xs text-white/70">Student: 20230028369@my.xu.edu.ph / password123</p>
-                  <p className="text-xs text-white/70">Formator: formator@xu.edu.ph / password123</p>
+                  <p className="mt-1 text-xs text-white/70">Formator: formator@xu.edu.ph / password123</p>
                   <p className="text-xs text-white/70">Admin: dfabela@xu.edu.ph / admin123</p>
                 </div>
 
-                <p className="mt-4 text-center text-sm text-white/80">
-                  Don't have an account?{' '}
-                  <Link to="/register" className="font-semibold text-white hover:underline">
-                    Create Account
-                  </Link>
-                </p>
               </div>
             )}
           </div>

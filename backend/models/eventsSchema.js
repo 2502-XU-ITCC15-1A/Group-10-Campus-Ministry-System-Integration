@@ -8,6 +8,8 @@ const cmoEventSchema = new mongoose.Schema({
   yearLevel: { type: String, required: true },
   venue: { type: String, required: true },
   inCharge: { type: String, required: true },
+  slots: { type: Number, default: 40 },
+  participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
 

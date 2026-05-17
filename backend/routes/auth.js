@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
-const User = require('../models/User');
+const User = require('../models/userSchema');
 const router = express.Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -94,59 +94,8 @@ const validateAccountRole = (user, accountType) => {
 // Auth route health check
 router.get('/', (req, res) => {
   res.json({
-    message: 'Auth route is live. Use POST /login, POST /register, POST /autoseed, or POST /seed.'
+    message: 'Auth route is live. Use POST /login, POST /autoseed, or POST /seed.'
   });
-});
-
-// Register new user (student or admin)
-router.post('/register', async (req, res) => {
-  try {
-    const { fullName, email, studentId, password, role, batch, department } = req.body;
-    const accountRole = role || 'student';
-    const generatedIdPrefix = accountRole === 'staff' ? 'FAC' : 'ADMIN';
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email already registered' });
-    }
-
-    // Check if studentId already exists (for students)
-    if (studentId) {
-      const existingStudentId = await User.findOne({ studentId });
-      if (existingStudentId) {
-        return res.status(400).json({ message: 'Student ID already registered' });
-      }
-    }
-
-    // Create new user
-    const newUser = new User({
-      fullName,
-      email,
-      studentId: studentId || `${generatedIdPrefix}${Date.now()}`,
-      password,
-      role: accountRole,
-      department: ['student', 'staff'].includes(accountRole) ? (department || inferDepartmentFromBatch(batch || '')) : '',
-      batch: batch || ''
-    });
-
-    await newUser.save();
-
-    res.status(201).json({ 
-      message: 'Registration successful',
-      user: {
-        id: newUser._id,
-        email: newUser.email,
-        role: newUser.role,
-        fullName: newUser.fullName,
-        studentId: newUser.studentId,
-        department: newUser.department || ''
-      }
-    });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ message: error.message });
-  }
 });
 
 // Auto-seed on first login attempt
@@ -167,12 +116,12 @@ router.post('/autoseed', async (req, res) => {
       { upsert: true, new: true }
     );
 
-    const studentHash = await bcrypt.hash('password123', 12);
+    const formatorHash = await bcrypt.hash('password123', 12);
     await User.findOneAndUpdate(
       { email: 'formator@xu.edu.ph' },
       {
         email: 'formator@xu.edu.ph',
-        password: studentHash,
+        password: formatorHash,
         role: 'staff',
         fullName: 'Formator Adviser',
         studentId: 'FAC001',
@@ -182,48 +131,12 @@ router.post('/autoseed', async (req, res) => {
       { upsert: true, new: true }
     );
 
-    await User.findOneAndUpdate(
-      { studentId: '20230028369' },
-      {
-        email: '20230028369@my.xu.edu.ph',
-        password: studentHash,
-        role: 'student',
-        fullName: 'John Doe',
-        studentId: '20230028369',
-        department: 'Computer Studies',
-        batch: 'BSIT-1A'
-      },
-      { upsert: true, new: true }
-    );
-
-    // Also create a few more test students for different batches
-    await User.findOneAndUpdate(
-      { studentId: '20230028370' },
-      {
-        email: '20230028370@my.xu.edu.ph',
-        password: studentHash,
-        role: 'student',
-        fullName: 'Jane Smith',
-        studentId: '20230028370',
-        department: 'Computer Studies',
-        batch: 'BSIT-1B'
-      },
-      { upsert: true, new: true }
-    );
-
-    await User.findOneAndUpdate(
-      { studentId: '20230028371' },
-      {
-        email: '20230028371@my.xu.edu.ph',
-        password: studentHash,
-        role: 'student',
-        fullName: 'Bob Wilson',
-        studentId: '20230028371',
-        department: 'Computer Studies',
-        batch: 'BSIT-2A'
-      },
-      { upsert: true, new: true }
-    );
+    await User.deleteMany({
+      $or: [
+        { studentId: { $in: ['20230028369', '20230028370', '20230028371'] } },
+        { email: { $in: ['20230028369@my.xu.edu.ph', '20230028370@my.xu.edu.ph', '20230028371@my.xu.edu.ph'] } }
+      ]
+    });
 
     console.log('✅ Test users auto-created!');
     res.json({ message: 'Test users created' });
@@ -247,7 +160,7 @@ router.post('/login', async (req, res) => {
     // If user doesn't exist, check if it's a test account.
     if (!user) {
       // Check if it's a test account and create it with the documented password.
-      if (emailValidation.email === '20230028369@my.xu.edu.ph' || emailValidation.email === 'dfabela@xu.edu.ph' || emailValidation.email === 'formator@xu.edu.ph' || emailValidation.email === 'faculty@xu.edu.ph') {
+      if (emailValidation.email === 'dfabela@xu.edu.ph' || emailValidation.email === 'formator@xu.edu.ph' || emailValidation.email === 'faculty@xu.edu.ph') {
         const isAdminTestUser = emailValidation.email === 'dfabela@xu.edu.ph';
         const isFacultyTestUser = emailValidation.email === 'formator@xu.edu.ph' || emailValidation.email === 'faculty@xu.edu.ph';
         const hashedPassword = await bcrypt.hash(isAdminTestUser ? 'admin123' : 'password123', 12);
@@ -256,11 +169,11 @@ router.post('/login', async (req, res) => {
           {
             email: emailValidation.email,
             password: hashedPassword,
-            role: isAdminTestUser ? 'admin' : isFacultyTestUser ? 'staff' : 'student',
-            fullName: isAdminTestUser ? 'Dean Fabela' : isFacultyTestUser ? 'Formator Adviser' : 'John Doe',
-            studentId: isAdminTestUser ? 'ADMIN001' : isFacultyTestUser ? 'FAC001' : '20230028369',
+            role: isAdminTestUser ? 'admin' : 'staff',
+            fullName: isAdminTestUser ? 'Dean Fabela' : 'Formator Adviser',
+            studentId: isAdminTestUser ? 'ADMIN001' : 'FAC001',
             department: isAdminTestUser ? '' : 'Computer Studies',
-            batch: isAdminTestUser ? '' : isFacultyTestUser ? 'BSIT-1' : 'BSIT-1A'
+            batch: isAdminTestUser ? '' : 'BSIT-1'
           },
           { upsert: true, new: true }
         );
@@ -427,12 +340,12 @@ router.post('/seed', async (req, res) => {
       { upsert: true, new: true }
     );
 
-    const studentHash = await bcrypt.hash('password123', 12);
+    const formatorHash = await bcrypt.hash('password123', 12);
     const faculty = await User.findOneAndUpdate(
       { email: 'formator@xu.edu.ph' },
       {
         email: 'formator@xu.edu.ph',
-        password: studentHash,
+        password: formatorHash,
         role: 'staff',
         fullName: 'Formator Adviser',
         studentId: 'FAC001',
@@ -442,30 +355,21 @@ router.post('/seed', async (req, res) => {
       { upsert: true, new: true }
     );
 
-    const student = await User.findOneAndUpdate(
-      { studentId: '20230028369' },
-      {
-        email: '20230028369@my.xu.edu.ph',
-        password: studentHash,
-        role: 'student',
-        fullName: 'John Doe',
-        studentId: '20230028369',
-        department: 'Computer Studies',
-        batch: 'BSIT-1A'
-      },
-      { upsert: true, new: true }
-    );
+    await User.deleteMany({
+      $or: [
+        { studentId: { $in: ['20230028369', '20230028370', '20230028371'] } },
+        { email: { $in: ['20230028369@my.xu.edu.ph', '20230028370@my.xu.edu.ph', '20230028371@my.xu.edu.ph'] } }
+      ]
+    });
 
     console.log('✅ Test users created!');
     console.log(`👨‍💼 Admin: dfabela@xu.edu.ph / admin123`);
     console.log(`👩‍🏫 Formator: formator@xu.edu.ph / password123`);
-    console.log(`👨‍🎓 Student: 20230028369@my.xu.edu.ph / password123`);
 
     res.json({ 
       message: 'Test users created successfully!',
       admin: admin.email,
-      faculty: faculty.email,
-      student: student.email 
+      faculty: faculty.email
     });
   } catch (error) {
     console.error('Seed error:', error);

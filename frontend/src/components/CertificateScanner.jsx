@@ -138,8 +138,16 @@ const CertificateScanner = () => {
             <p className="text-sm text-gray-500">Scan a certificate QR code or paste its QR data below.</p>
           </div>
 
-          <div className="overflow-hidden bg-[#edf0f7]">
+          <div className="relative overflow-hidden bg-[#edf0f7]">
             <video ref={videoRef} className="aspect-video w-full bg-gray-900 object-cover" muted playsInline />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="relative h-48 w-48 max-w-[70%]">
+                <span className="absolute left-0 top-0 h-12 w-12 border-l-4 border-t-4 border-white shadow" />
+                <span className="absolute right-0 top-0 h-12 w-12 border-r-4 border-t-4 border-white shadow" />
+                <span className="absolute bottom-0 left-0 h-12 w-12 border-b-4 border-l-4 border-white shadow" />
+                <span className="absolute bottom-0 right-0 h-12 w-12 border-b-4 border-r-4 border-white shadow" />
+              </div>
+            </div>
             <canvas ref={canvasRef} className="hidden" />
           </div>
 
@@ -215,8 +223,9 @@ const CertificateScanner = () => {
             <div className="border-l-4 border-red-500 bg-red-50 p-5 text-sm text-red-700">
               {result.message || 'Certificate could not be verified.'}
             </div>
-          ) : (
+         ) : (
             <div className="space-y-4">
+              <CertificateImage certificate={certificate} />
               {[
                 ['Student Name', student?.fullName],
                 ['Student ID', student?.studentId],
@@ -285,8 +294,11 @@ const CertificateScanner = () => {
 
       {selectedCertificate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-md bg-white p-6 shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto bg-white p-6 shadow-2xl">
             <h2 className="text-xl font-bold text-gray-900">{selectedCertificate.eventName || 'Certificate'}</h2>
+            <div className="mt-5">
+              <CertificateImage certificate={selectedCertificate} />
+            </div>
             <div className="mt-4 space-y-3 text-sm">
               <p><strong>ID:</strong> {selectedCertificate.certificateId}</p>
               <p><strong>Date Generated:</strong> {selectedCertificate.DateGenerated ? new Date(selectedCertificate.DateGenerated).toLocaleDateString() : '-'}</p>
@@ -303,6 +315,74 @@ const CertificateScanner = () => {
       )}
     </div>
   );
+};
+
+const CertificateImage = ({ certificate }) => {
+  const aspectRatio = useImageAspectRatio(certificate?.certBgImgKey);
+  const student = certificate?.student || {};
+  const date = certificate?.eventDate ? new Date(certificate.eventDate).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }) : '';
+
+  return (
+    <div
+      className="relative mx-auto flex w-full max-w-5xl flex-col items-center justify-center overflow-hidden border bg-white p-6 text-center text-gray-900"
+      style={{
+        aspectRatio,
+        ...(certificate?.certBgImgKey ? { backgroundImage: `url(${certificate.certBgImgKey})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {})
+      }}
+    >
+      <div className={`absolute inset-0 ${certificate?.certBgImgKey ? 'bg-white/35' : 'bg-white/75'}`} />
+      <div className="relative z-10 max-w-3xl">
+        <p className="text-lg font-semibold uppercase tracking-wide text-[#3a53a5]">Certificate of Participation</p>
+        <h3 className="mt-3 font-serif text-4xl font-bold text-gray-900">{certificate?.certEventType || certificate?.eventName || 'Certificate'}</h3>
+        <p className="mt-4 text-lg text-gray-700">This certifies that</p>
+        <p className="mt-2 font-serif text-5xl font-bold text-[#24366f]">{student.fullName || certificate?.studentName || 'Student Name'}</p>
+        <p className="mt-4 text-lg text-gray-700">
+          has participated in {certificate?.certEventTheme || certificate?.eventName || 'the event'}.
+        </p>
+        <p className="mt-3 text-lg text-gray-700">
+          {date} {certificate?.certEventVenue ? `at ${certificate.certEventVenue}` : ''}
+        </p>
+        <div className="mt-14 flex flex-col items-center">
+          {certificate?.certSigImgKey && <img src={certificate.certSigImgKey} alt="Director signature" className="h-20 object-contain" />}
+          <div className="mt-1 w-48 border-t border-gray-700" />
+          <p className="mt-1 text-lg font-semibold">{certificate?.certDirectorName || 'Director'}</p>
+        </div>
+      </div>
+      {certificate?.qrCode && (
+        <div className="absolute bottom-5 right-5 z-20 w-28 p-1">
+          <img src={certificate.qrCode} alt="Certificate QR Code" className="h-full w-full object-contain" />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const useImageAspectRatio = (src) => {
+  const [ratio, setRatio] = useState('297 / 210');
+
+  useEffect(() => {
+    if (!src) {
+      setRatio('297 / 210');
+      return undefined;
+    }
+
+    const image = new Image();
+    image.onload = () => {
+      if (image.naturalWidth && image.naturalHeight) {
+        setRatio(`${image.naturalWidth} / ${image.naturalHeight}`);
+      }
+    };
+    image.src = src;
+    return () => {
+      image.onload = null;
+    };
+  }, [src]);
+
+  return ratio;
 };
 
 export default CertificateScanner;

@@ -3,16 +3,14 @@ import api from '../services/api';
 import toast from 'react-hot-toast';
 
 const collegeDepartments = {
-  Agriculture: ['Agriculture'],
-  ArtsScience: ['Arts and Science', 'Psychology', 'Communication'],
-  BusinessManagement: ['Business Management'],
-  ComputerStudies: ['Computer Studies'],
-  Education: ['Education'],
-  Engineering: ['Engineering'],
-  Nursing: ['Nursing']
+  Agriculture: ['BS Agribusiness', 'BS Agriculture', 'BS Agricultural & Biosystems Engineering', 'BS Food Technology', 'BS Development Communication'],
+  ArtsScience: ['AB Economics', 'AB History', 'AB Interdisciplinary Studies', 'AB International Studies', 'AB English Language', 'AB Literature', 'AB Philosophy', 'AB Psychology', 'AB Sociology', 'BS Biology', 'BS Chemistry', 'BS Marine Biology', 'BS Mathematics', 'BS Psychology'],
+  BusinessManagement: ['BS Accountancy', 'BS Business Administration', 'BS Management Accounting'],
+  ComputerStudies: ['BS Computer Science', 'BS Information Systems', 'BS Information Technology', 'BS Entertainment & Multimedia Computing'],
+  Education: ['Bachelor of Early Childhood Education', 'Bachelor of Elementary Education', 'Bachelor of Special Needs Education', 'Bachelor of Technology and Livelihood Education', 'Bachelor of Secondary Education'],
+  Engineering: ['BS Chemical Engineering', 'BS Civil Engineering', 'BS Electrical Engineering', 'BS Electronics Engineering', 'BS Industrial Engineering', 'BS Mechanical Engineering'],
+  Nursing: ['BS Nursing']
 };
-
-const majors = ['BSIT', 'BSCS', 'BSIS', 'AB Communication', 'Nursing', 'Engineering', 'Education', 'Agriculture', 'Business Management'];
 
 const emptyStudent = {
   studentId: '',
@@ -20,9 +18,30 @@ const emptyStudent = {
   lastName: '',
   college: '',
   department: '',
-  major: '',
   yearStanding: '',
   email: ''
+};
+
+const collegeAliases = {
+  Agriculture: 'Agriculture',
+  'Arts Science': 'ArtsScience',
+  'Arts and Science': 'ArtsScience',
+  'Arts and Sciences': 'ArtsScience',
+  ArtsScience: 'ArtsScience',
+  'Business Management': 'BusinessManagement',
+  BusinessManagement: 'BusinessManagement',
+  'Computer Studies': 'ComputerStudies',
+  ComputerStudies: 'ComputerStudies',
+  Education: 'Education',
+  Engineering: 'Engineering',
+  Nursing: 'Nursing'
+};
+
+const normalizeCollegeKey = (value, department) => {
+  if (collegeAliases[value]) return collegeAliases[value];
+  if (collegeAliases[department]) return collegeAliases[department];
+  const match = Object.entries(collegeDepartments).find(([, departments]) => departments.includes(department));
+  return match?.[0] || '';
 };
 
 const parseCsv = (text) => {
@@ -36,6 +55,44 @@ const parseCsv = (text) => {
   });
 };
 
+const normalizeYearLevel = (value = '') => {
+  const text = String(value || '').trim();
+  const match = text.match(/[1-4]/);
+  return match ? match[0] : text;
+};
+
+const normalizeEmail = (value = '') => String(value || '').trim().toLowerCase();
+
+const getDuplicateWarnings = (rows) => {
+  const seenStudentIds = new Map();
+  const seenEmails = new Map();
+  const duplicateMessages = [];
+
+  rows.forEach((row, index) => {
+    const rowNumber = index + 2;
+    const studentId = String(row.studentId || '').trim();
+    const email = normalizeEmail(row.email);
+
+    if (studentId) {
+      if (seenStudentIds.has(studentId)) {
+        duplicateMessages.push(`Student ID ${studentId} appears more than once in the CSV, rows ${seenStudentIds.get(studentId)} and ${rowNumber}.`);
+      } else {
+        seenStudentIds.set(studentId, rowNumber);
+      }
+    }
+
+    if (email) {
+      if (seenEmails.has(email)) {
+        duplicateMessages.push(`Email ${email} appears more than once in the CSV, rows ${seenEmails.get(email)} and ${rowNumber}.`);
+      } else {
+        seenEmails.set(email, rowNumber);
+      }
+    }
+  });
+
+  return [...new Set(duplicateMessages)];
+};
+
 const CertificateGenerator = () => {
   const [mode, setMode] = useState('generate');
   const [students, setStudents] = useState([]);
@@ -47,6 +104,8 @@ const CertificateGenerator = () => {
   const [studentForm, setStudentForm] = useState(emptyStudent);
   const [csvFileName, setCsvFileName] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState({ open: false, rows: [], messages: [] });
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const fetchData = async () => {
     const [studentResponse, templateResponse] = await Promise.all([
@@ -66,6 +125,24 @@ const CertificateGenerator = () => {
     [templates, selectedTemplateId]
   );
 
+  const studentSuggestions = useMemo(() => {
+    const keyword = [
+      studentForm.studentId,
+      studentForm.firstName,
+      studentForm.lastName,
+      studentForm.email
+    ].join(' ').trim().toLowerCase();
+
+    if (keyword.length < 2) return [];
+
+    return students
+      .filter((student) => (
+        [student.studentId, student.firstName, student.lastName, student.fullName, student.email]
+          .some((value) => String(value || '').toLowerCase().includes(keyword))
+      ))
+      .slice(0, 5);
+  }, [students, studentForm.email, studentForm.firstName, studentForm.lastName, studentForm.studentId]);
+
   const resetContext = () => {
     setMode('generate');
     setStagedStudents([]);
@@ -76,7 +153,7 @@ const CertificateGenerator = () => {
   };
 
   const validateStudent = (student) => {
-    if (!student.studentId || !student.firstName || !student.lastName || !student.college || !student.department || !student.major || !student.yearStanding || !student.email) {
+    if (!student.studentId || !student.firstName || !student.lastName || !student.college || !student.department || !student.yearStanding || !student.email) {
       toast.error('Please fill out all student fields');
       return false;
     }
@@ -89,6 +166,44 @@ const CertificateGenerator = () => {
       return false;
     }
     return true;
+  };
+
+  const buildStudentForm = (student) => {
+    const nameParts = String(student.fullName || '').trim().split(/\s+/).filter(Boolean);
+    const firstName = student.firstName || nameParts.slice(0, -1).join(' ') || nameParts[0] || '';
+    const lastName = student.lastName || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '');
+    const college = normalizeCollegeKey(student.college, student.department);
+    return {
+      studentId: student.studentId || '',
+      firstName,
+      lastName,
+      college,
+      department: student.department || '',
+      yearStanding: normalizeYearLevel(student.yearStanding || String(student.batch || '').match(/-(\d)/)?.[1] || ''),
+      email: student.email || ''
+    };
+  };
+
+  const applyStudentSuggestion = (student) => {
+    setStudentForm(buildStudentForm(student));
+    toast.success('Student details filled');
+  };
+
+  const handleSoloFieldChange = (field, value) => {
+    const nextForm = { ...studentForm, [field]: value };
+    if (field === 'college') nextForm.department = '';
+
+    if (field === 'studentId' || field === 'email') {
+      const exactMatch = students.find((student) =>
+        String(student[field] || '').toLowerCase() === String(value || '').trim().toLowerCase()
+      );
+      if (exactMatch) {
+        setStudentForm(buildStudentForm(exactMatch));
+        return;
+      }
+    }
+
+    setStudentForm(nextForm);
   };
 
   const handleUploadSolo = () => {
@@ -110,18 +225,57 @@ const CertificateGenerator = () => {
       lastName: row.lastName || row.LastName || row['Last Name'] || '',
       college: row.college || row.College || '',
       department: row.department || row.Department || '',
-      major: row.major || row.Major || '',
-      yearStanding: row.yearStanding || row.YearStanding || row['Year Standing'] || '',
-      email: row.email || row.Email || ''
+      yearStanding: normalizeYearLevel(row.yearStanding || row.YearStanding || row['Year Standing'] || row.yearLevel || row.YearLevel || row['Year Level'] || ''),
+      email: normalizeEmail(row.email || row.Email || '')
     })).filter((row) => row.studentId);
+
+    const missingRequired = rows.filter((row) => !row.firstName || !row.lastName || !row.email || !row.yearStanding);
+    if (missingRequired.length > 0) {
+      toast.error('Some CSV rows are missing name, email, or year level');
+      event.target.value = '';
+      return;
+    }
+
+    const duplicateMessages = getDuplicateWarnings(rows);
+    if (duplicateMessages.length > 0) {
+      setDuplicateWarning({ open: true, rows, messages: duplicateMessages });
+      event.target.value = '';
+      return;
+    }
 
     setStagedStudents(rows);
     toast.success(`${rows.length} student${rows.length === 1 ? '' : 's'} uploaded`);
+    event.target.value = '';
+  };
+
+  const confirmDuplicateUpload = () => {
+    setStagedStudents(duplicateWarning.rows);
+    toast.success(`${duplicateWarning.rows.length} student${duplicateWarning.rows.length === 1 ? '' : 's'} uploaded`);
+    setDuplicateWarning({ open: false, rows: [], messages: [] });
+  };
+
+  const confirmRemoveUploadedStudent = () => {
+    if (!deleteTarget) return;
+    const isSameStudent = (student) => (
+      (deleteTarget.certificateId && student.certificateId === deleteTarget.certificateId) ||
+      (deleteTarget.studentId && student.studentId === deleteTarget.studentId) ||
+      (deleteTarget.email && normalizeEmail(student.email) === normalizeEmail(deleteTarget.email))
+    );
+    setStagedStudents((current) => current.filter((student) => !isSameStudent(student)));
+    setMailData((current) => current.filter((student) => !isSameStudent(student)));
+    setDeleteTarget(null);
+    toast.success('Student removed from batch');
   };
 
   const assignCertificateIds = () => {
     if (stagedStudents.length === 0) {
       toast.error('Upload student data first');
+      return;
+    }
+
+    const duplicateMessages = getDuplicateWarnings(stagedStudents);
+    if (duplicateMessages.length > 0) {
+      toast.error('Please remove duplicate students or emails before assigning certificate IDs');
       return;
     }
 
@@ -134,7 +288,7 @@ const CertificateGenerator = () => {
   };
 
   const findOrCreateStudent = async (student) => {
-    const existing = students.find((item) => item.studentId === student.studentId);
+    const existing = students.find((item) => item.studentId === student.studentId || normalizeEmail(item.email) === normalizeEmail(student.email));
     if (existing) return existing;
 
     const response = await api.post('/admin/students', student);
@@ -158,7 +312,8 @@ const CertificateGenerator = () => {
         await api.post('/admin/certificates', {
           studentId: savedStudent._id,
           eventName,
-          eventDate
+          eventDate,
+          templateId: selectedTemplate._id
         });
       }
 
@@ -207,32 +362,46 @@ const CertificateGenerator = () => {
                 <h2 className="flex-grow text-center text-2xl font-semibold">SOLO GENERATION</h2>
               </div>
               <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-                <input placeholder="STUDENT ID NO." value={studentForm.studentId} onChange={(event) => setStudentForm({ ...studentForm, studentId: event.target.value })} className="rounded-lg border-2 p-3" />
-                <input placeholder="FIRST NAME" value={studentForm.firstName} onChange={(event) => setStudentForm({ ...studentForm, firstName: event.target.value })} className="rounded-lg border-2 p-3" />
-                <input placeholder="LAST NAME" value={studentForm.lastName} onChange={(event) => setStudentForm({ ...studentForm, lastName: event.target.value })} className="rounded-lg border-2 p-3" />
-                <select value={studentForm.college} onChange={(event) => setStudentForm({ ...studentForm, college: event.target.value, department: '' })} className="rounded-lg border-2 p-3">
+                <input placeholder="STUDENT ID NO." value={studentForm.studentId} onChange={(event) => handleSoloFieldChange('studentId', event.target.value)} className="rounded-lg border-2 p-3" />
+                <input placeholder="FIRST NAME" value={studentForm.firstName} onChange={(event) => handleSoloFieldChange('firstName', event.target.value)} className="rounded-lg border-2 p-3" />
+                <input placeholder="LAST NAME" value={studentForm.lastName} onChange={(event) => handleSoloFieldChange('lastName', event.target.value)} className="rounded-lg border-2 p-3" />
+                {studentSuggestions.length > 0 && (
+                  <div className="rounded-lg border border-[#3a53a5]/30 bg-[#edf0f7] p-3 md:col-span-3">
+                    <p className="mb-2 text-xs font-semibold uppercase text-gray-500">Student Suggestions</p>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      {studentSuggestions.map((student) => (
+                        <button
+                          key={student._id || student.studentId}
+                          type="button"
+                          onClick={() => applyStudentSuggestion(student)}
+                          className="rounded border bg-white px-3 py-2 text-left text-sm hover:border-[#3a53a5]"
+                        >
+                          <span className="block font-semibold text-gray-900">{student.fullName || `${student.firstName || ''} ${student.lastName || ''}`}</span>
+                          <span className="block text-xs text-gray-500">{student.studentId} • {student.email}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <select value={studentForm.college} onChange={(event) => handleSoloFieldChange('college', event.target.value)} className="rounded-lg border-2 p-3">
                   <option value="">Select College</option>
                   {Object.keys(collegeDepartments).map((college) => <option key={college} value={college}>{college.replace(/([A-Z])/g, ' $1').trim()}</option>)}
                 </select>
-                <select value={studentForm.department} onChange={(event) => setStudentForm({ ...studentForm, department: event.target.value })} className="rounded-lg border-2 p-3" disabled={!studentForm.college}>
+                <select value={studentForm.department} onChange={(event) => handleSoloFieldChange('department', event.target.value)} className="rounded-lg border-2 p-3" disabled={!studentForm.college}>
                   <option value="">Select Department</option>
                   {(collegeDepartments[studentForm.college] || []).map((department) => <option key={department} value={department}>{department}</option>)}
                 </select>
-                <select value={studentForm.major} onChange={(event) => setStudentForm({ ...studentForm, major: event.target.value })} className="rounded-lg border-2 p-3">
-                  <option value="">Select Major</option>
-                  {majors.map((major) => <option key={major} value={major}>{major}</option>)}
-                </select>
-                <select value={studentForm.yearStanding} onChange={(event) => setStudentForm({ ...studentForm, yearStanding: event.target.value })} className="rounded-lg border-2 p-3">
+                <select value={studentForm.yearStanding} onChange={(event) => handleSoloFieldChange('yearStanding', event.target.value)} className="rounded-lg border-2 p-3">
                   <option value="">Select Year Level</option>
                   <option value="1">1st</option>
                   <option value="2">2nd</option>
                   <option value="3">3rd</option>
                   <option value="4">4th</option>
                 </select>
-                <input placeholder="XU EMAIL" value={studentForm.email} onChange={(event) => setStudentForm({ ...studentForm, email: event.target.value })} className="rounded-lg border-2 p-3 md:col-span-2" />
+                <input placeholder="XU EMAIL" value={studentForm.email} onChange={(event) => handleSoloFieldChange('email', event.target.value)} className="rounded-lg border-2 p-3 md:col-span-2" />
               </div>
               <button onClick={handleUploadSolo} disabled={stagedStudents.length > 0} className="rounded-lg bg-[#3a53a5] px-4 py-2 font-semibold text-white hover:bg-[#2a3a85] disabled:opacity-50">Upload</button>
-              <StudentPreview rows={stagedStudents} />
+              <StudentPreview rows={stagedStudents} onRemove={setDeleteTarget} />
               <div className="text-right">
                 <button onClick={assignCertificateIds} disabled={stagedStudents.length === 0} className="rounded bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-50">Assign Certificate IDs</button>
               </div>
@@ -252,7 +421,7 @@ const CertificateGenerator = () => {
                 <button onClick={() => document.querySelector('input[type=file]')?.click()} className="rounded bg-[#3a53a5] px-4 py-2 font-semibold text-white hover:bg-[#2a3a85]">Upload</button>
                 <button onClick={assignCertificateIds} disabled={stagedStudents.length === 0} className="rounded bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-50">Create Certificates</button>
               </div>
-              <StudentPreview rows={stagedStudents} />
+              <StudentPreview rows={stagedStudents} onRemove={setDeleteTarget} />
             </>
           )}
 
@@ -262,7 +431,7 @@ const CertificateGenerator = () => {
                 <input value={selectedTemplateId} readOnly placeholder="Selected Template ID" className="h-11 flex-1 border px-3" />
                 <button onClick={() => setTemplateModalOpen(true)} className="ml-4 rounded bg-[#3a53a5] px-4 py-2 font-semibold text-white hover:bg-[#2a3a85]">Select Template</button>
               </div>
-              <StudentPreview rows={mailData} showCertificate />
+              <StudentPreview rows={mailData} showCertificate onRemove={setDeleteTarget} />
               <div className="mt-5 text-right">
                 <button onClick={generateCertificates} disabled={generating || !selectedTemplateId} className="rounded bg-[#3a53a5] px-4 py-2 font-semibold text-white hover:bg-[#2a3a85] disabled:opacity-50">
                   {generating ? 'Generating...' : 'Generate Certificates'}
@@ -299,16 +468,72 @@ const CertificateGenerator = () => {
           </div>
         </div>
       )}
+
+      {duplicateWarning.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-lg bg-white p-6 shadow-2xl">
+            <h2 className="text-xl font-bold text-gray-900">Duplicate Students Found</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Some student IDs or emails are already in the CSV or student records. Are you sure you want to upload this batch?
+            </p>
+            <div className="mt-4 max-h-52 overflow-y-auto bg-[#edf0f7] p-3 text-sm text-gray-700">
+              {duplicateWarning.messages.map((message) => (
+                <p key={message} className="mb-2">{message}</p>
+              ))}
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDuplicateWarning({ open: false, rows: [], messages: [] })}
+                className="border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDuplicateUpload}
+                className="bg-[#3a53a5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2a3a85]"
+              >
+                Upload Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
+              <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M4.93 19h14.14a2 2 0 001.73-3L13.73 4a2 2 0 00-3.46 0L3.2 16a2 2 0 001.73 3z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Delete Selected Student?</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Are you sure you want to remove {deleteTarget.firstName} {deleteTarget.lastName} from this certificate batch?
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button type="button" onClick={confirmRemoveUploadedStudent} className="bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                Delete Student
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-const StudentPreview = ({ rows, showCertificate = false }) => (
+const StudentPreview = ({ rows, showCertificate = false, onRemove }) => (
   <div className="my-4 overflow-x-auto">
     <table className="min-w-full divide-y divide-gray-200 border">
       <thead className="bg-gray-50">
         <tr>
-          {(showCertificate ? ['Certificate ID', 'Student ID', 'First Name', 'Last Name', 'Email'] : ['Student ID', 'First Name', 'Last Name', 'Email']).map((heading) => (
+          {(showCertificate ? ['Certificate ID', 'Student ID', 'First Name', 'Last Name', 'Year Level', 'Email', 'Actions'] : ['Student ID', 'First Name', 'Last Name', 'Year Level', 'Email', 'Actions']).map((heading) => (
             <th key={heading} className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">{heading}</th>
           ))}
         </tr>
@@ -320,7 +545,19 @@ const StudentPreview = ({ rows, showCertificate = false }) => (
             <td className="px-4 py-3 text-sm">{student.studentId}</td>
             <td className="px-4 py-3 text-sm">{student.firstName}</td>
             <td className="px-4 py-3 text-sm">{student.lastName}</td>
+            <td className="px-4 py-3 text-sm">{student.yearStanding}</td>
             <td className="px-4 py-3 text-sm">{student.email}</td>
+            <td className="px-4 py-3 text-sm">
+              {onRemove && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(student)}
+                  className="font-semibold text-red-600 hover:underline"
+                >
+                  Delete
+                </button>
+              )}
+            </td>
           </tr>
         ))}
       </tbody>

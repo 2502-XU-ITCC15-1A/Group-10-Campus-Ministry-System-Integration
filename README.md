@@ -1,6 +1,6 @@
-# Campus Ministry System
+# Campus Ministries System
 
-The Campus Ministry System is a full-stack web application for Xavier University Ateneo de Cagayan's Campus Ministry. It manages student evaluations, recollection schedules, student records, account access, QR-enabled certificates, certificate verification, reports, and role-based dashboards.
+The Campus Ministries System is a full-stack web application for Xavier University Ateneo de Cagayan's Campus Ministries. It manages student evaluations, recollection schedules, student records, account access, QR-enabled certificates, certificate verification, reports, and role-based dashboards.
 
 ## Features
 
@@ -127,7 +127,7 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=your-email@xu.edu.ph
 SMTP_PASS=your-email-app-password
-SMTP_FROM="Campus Ministry <your-email@xu.edu.ph>"
+SMTP_FROM="Campus Ministries <your-email@xu.edu.ph>"
 ```
 
 ### Frontend
@@ -217,14 +217,12 @@ The system can automatically create these test accounts when they are used for l
 | --- | --- | --- |
 | Admin | `dfabela@xu.edu.ph` | `admin123` |
 | Formator | `formator@xu.edu.ph` | `password123` |
-| Student | `20230028369@my.xu.edu.ph` | `password123` |
 
 ## Main Routes
 
 | Area | Route |
 | --- | --- |
 | Login | `/login` |
-| Register | `/register` |
 | Admin Dashboard | `/admin/dashboard` |
 | Formator Dashboard | `/formator/dashboard` |
 | Student Dashboard | `/student/dashboard` |
@@ -243,7 +241,6 @@ The system can automatically create these test accounts when they are used for l
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| POST | `/api/auth/register` | Register a user |
 | POST | `/api/auth/login` | Login with email and password |
 | POST | `/api/auth/google` | Login with Google |
 | POST | `/api/auth/forgot-password` | Generate password reset code |
@@ -319,4 +316,4 @@ Additional documentation is available in:
 
 ## License
 
-This project is prepared for academic and capstone use by the Campus Ministry System team.
+This project is prepared for academic and capstone use by the Campus Ministries System team.

@@ -7,28 +7,56 @@ const StudentProfile = () => {
   const { user, updateUser } = useContext(AuthContext);
   const [profile, setProfile] = useState(null);
   const [formData, setFormData] = useState({
-    department: 'Computer Studies',
-    course: '',
+    college: '',
+    department: '',
     yearLevel: ''
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const departments = [
-    'Nursing',
-    'Computer Studies',
-    'Engineering',
-    'Agriculture',
-    'Business Management',
-    'Education',
-    'Arts and Science'
-  ];
-
-  const courses = [
-    { value: 'BSIT', label: 'BSIT - Bachelor of Science in Information Technology' },
-    { value: 'BSCS', label: 'BSCS - Bachelor of Science in Computer Science' },
-    { value: 'BSIS', label: 'BSIS - Bachelor of Science in Information Systems' },
-    { value: 'ABCom', label: 'ABCom - AB Communication' }
+  const colleges = [
+    {
+      name: 'AGRICULTURE',
+      value: 'Agriculture',
+      departments: ['BS Agribusiness', 'BS Agriculture', 'BS Agricultural & Biosystems Engineering', 'BS Food Technology', 'BS Development Communication'],
+      legacyDepartments: ['Agriculture']
+    },
+    {
+      name: 'ARTS & SCIENCES',
+      value: 'Arts Science',
+      departments: ['AB Economics', 'AB History', 'AB Interdisciplinary Studies', 'AB International Studies', 'AB English Language', 'AB Literature', 'AB Philosophy', 'AB Psychology', 'AB Sociology', 'BS Biology', 'BS Chemistry', 'BS Marine Biology', 'BS Mathematics', 'BS Psychology'],
+      legacyDepartments: ['Arts and Science', 'Arts and Sciences']
+    },
+    {
+      name: 'BUSINESS MANAGEMENT',
+      value: 'Business Management',
+      departments: ['BS Accountancy', 'BS Business Administration', 'BS Management Accounting'],
+      legacyDepartments: ['Business Management']
+    },
+    {
+      name: 'COMPUTER STUDIES',
+      value: 'Computer Studies',
+      departments: ['BS Computer Science', 'BS Information Systems', 'BS Information Technology', 'BS Entertainment & Multimedia Computing'],
+      legacyDepartments: ['Computer Studies']
+    },
+    {
+      name: 'EDUCATION',
+      value: 'Education',
+      departments: ['Bachelor of Early Childhood Education', 'Bachelor of Elementary Education', 'Bachelor of Special Needs Education', 'Bachelor of Technology and Livelihood Education', 'Bachelor of Secondary Education'],
+      legacyDepartments: ['Education']
+    },
+    {
+      name: 'ENGINEERING',
+      value: 'Engineering',
+      departments: ['BS Chemical Engineering', 'BS Civil Engineering', 'BS Electrical Engineering', 'BS Electronics Engineering', 'BS Industrial Engineering', 'BS Mechanical Engineering'],
+      legacyDepartments: ['Engineering']
+    },
+    {
+      name: 'NURSING',
+      value: 'Nursing',
+      departments: ['BS Nursing'],
+      legacyDepartments: ['Nursing']
+    }
   ];
 
   const yearLevelLabels = {
@@ -47,8 +75,8 @@ const StudentProfile = () => {
       const response = await api.get('/student/profile');
       setProfile(response.data);
       setFormData({
-        department: response.data.department || 'Computer Studies',
-        course: response.data.course || '',
+        college: response.data.college || '',
+        department: response.data.department || '',
         yearLevel: response.data.yearLevel || ''
       });
     } catch (error) {
@@ -62,15 +90,16 @@ const StudentProfile = () => {
     const { name, value } = event.target;
     setFormData((current) => ({
       ...current,
-      [name]: value
+      [name]: value,
+      ...(name === 'college' ? { department: '' } : {})
     }));
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!formData.department || !formData.course || !formData.yearLevel) {
-      toast.error('Please complete your department, course, and year level');
+    if (!formData.college || !formData.department || !formData.yearLevel) {
+      toast.error('Please complete your college, department, and year level');
       return;
     }
 
@@ -94,6 +123,11 @@ const StudentProfile = () => {
       </div>
     );
   }
+
+  const selectedCollege = colleges.find((college) => college.value === formData.college);
+  const departmentOptions = selectedCollege
+    ? [...(selectedCollege.legacyDepartments || []), ...selectedCollege.departments]
+    : [];
 
   return (
     <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
@@ -125,8 +159,8 @@ const StudentProfile = () => {
               <path d="M3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.69-.824V9.397zM6 14.683V10.55l3.212 1.377a2 2 0 001.576 0L14 10.55v4.133A8.998 8.998 0 016 14.683zM15 14.222V10.12l1.69-.724v4.002a8.969 8.969 0 00-1.69.824z" />
             </svg>
           </div>
-          <p className="text-sm font-medium text-gray-600">Course</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{profile?.course || 'Not set'}</p>
+          <p className="text-sm font-medium text-gray-600">College</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{profile?.college || 'Not set'}</p>
           <p className="text-sm text-gray-500 mt-2">{yearLevelLabels[profile?.yearLevel] || 'Year level required'}</p>
         </div>
 
@@ -165,34 +199,36 @@ const StudentProfile = () => {
 
         <form onSubmit={handleSubmit} className="p-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div>
+            <label htmlFor="college" className="block text-sm font-medium text-gray-700">College</label>
+            <select
+              id="college"
+              name="college"
+              value={formData.college}
+              onChange={handleChange}
+              className="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            >
+              <option value="">Select College</option>
+              {colleges.map((college) => (
+                <option key={college.value} value={college.value}>{college.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label htmlFor="department" className="block text-sm font-medium text-gray-700">Department</label>
             <select
               id="department"
               name="department"
               value={formData.department}
               onChange={handleChange}
+              disabled={!formData.college}
               className="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
             >
-              {departments.map((department) => (
+              <option value="">Select Department</option>
+              {departmentOptions.map((department) => (
                 <option key={department} value={department}>{department}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="course" className="block text-sm font-medium text-gray-700">Course</label>
-            <select
-              id="course"
-              name="course"
-              value={formData.course}
-              onChange={handleChange}
-              className="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            >
-              <option value="">Select Course</option>
-              {courses.map((course) => (
-                <option key={course.value} value={course.value}>{course.label}</option>
               ))}
             </select>
           </div>

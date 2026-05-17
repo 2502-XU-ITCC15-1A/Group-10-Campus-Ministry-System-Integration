@@ -1,8 +1,8 @@
-# Campus Ministry System Manual
+# Campus Ministries System Manual
 
 ## 1. System Overview
 
-The Campus Ministry System is a full-stack web application for managing recollections, evaluations, student records, account access, certificates, QR verification, and reports.
+The Campus Ministries System is a full-stack web application for managing recollections, evaluations, student records, account access, certificates, QR verification, and reports.
 
 The system uses:
 
@@ -384,7 +384,7 @@ Recommended placement:
 File:
 
 ```text
-backend/models/User.js
+backend/models/userSchema.js
 ```
 
 Important fields:
@@ -401,7 +401,7 @@ resetPasswordToken, resetPasswordExpires
 File:
 
 ```text
-backend/models/Certificate.js
+backend/models/certificatesSchema.js
 ```
 
 Important fields:
@@ -442,7 +442,6 @@ Base path:
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/register` | Register new user |
 | `POST` | `/login` | Email/password login |
 | `POST` | `/google` | Google login |
 | `POST` | `/forgot-password` | Generate reset token |
@@ -508,7 +507,6 @@ Base path:
 | Component | Purpose |
 | --- | --- |
 | `Login.jsx` | Login, Google login, forgot password |
-| `Register.jsx` | Account registration |
 | `AdminDashboard.jsx` | Admin overview |
 | `FacultyDashboard.jsx` | Formator scoped overview |
 | `StudentDashboard.jsx` | Student recollections, evaluations, certificates |
@@ -555,7 +553,7 @@ Purpose:
 File:
 
 ```text
-backend/routes/admin.js
+backend/routes/certGenerationRoutes.js
 ```
 
 Process:
@@ -571,7 +569,7 @@ Process:
 File:
 
 ```text
-backend/routes/admin.js
+backend/routes/certVerificationRoutes.js
 ```
 
 Endpoint:

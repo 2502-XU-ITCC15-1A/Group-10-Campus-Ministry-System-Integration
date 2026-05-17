@@ -1,8 +1,8 @@
-# Campus Ministry System User Manual
+# Campus Ministries System User Manual
 
 ## 1. Introduction
 
-The Campus Ministry System is a web application for managing student recollections, evaluations, certificates, account access, and certificate verification. It supports three user roles:
+The Campus Ministries System is a web application for managing student recollections, evaluations, certificates, account access, and certificate verification. It supports three user roles:
 
 - Student
 - Formator
@@ -20,7 +20,6 @@ Use these accounts for testing:
 
 | Role | Email | Password |
 | --- | --- | --- |
-| Student | `20230028369@my.xu.edu.ph` | `password123` |
 | Formator | `formator@xu.edu.ph` | `password123` |
 | Admin | `dfabela@xu.edu.ph` | `admin123` |
 

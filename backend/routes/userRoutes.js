@@ -1,22 +1,64 @@
 const express = require('express');
+const router = express.Router();
+
+const adminRouter = (() => {
+const express = require('express');
 const jwt = require('jsonwebtoken');
 const Evaluation = require('../models/Evaluation');
-const User = require('../models/User');
-const Certificate = require('../models/Certificate');
+const User = require('../models/userSchema');
+const Certificate = require('../models/certificatesSchema');
 const Recollection = require('../models/Recollection');
-const CmoEvent = require('../models/CmoEvent');
-const CertificateTemplate = require('../models/CertificateTemplate');
+const CmoEvent = require('../models/eventsSchema');
+const CertificateTemplate = require('../models/certTemplateSchema');
 const QRCode = require('qrcode');
 const { sendEmail } = require('../services/emailService');
 const router = express.Router();
 const departments = [
-  'Nursing',
-  'Computer Studies',
-  'Engineering',
   'Agriculture',
+  'Arts and Science',
   'Business Management',
+  'Computer Studies',
   'Education',
-  'Arts and Science'
+  'Engineering',
+  'Nursing',
+  'BS Agribusiness',
+  'BS Agriculture',
+  'BS Agricultural & Biosystems Engineering',
+  'BS Food Technology',
+  'BS Development Communication',
+  'AB Economics',
+  'AB History',
+  'AB Interdisciplinary Studies',
+  'AB International Studies',
+  'AB English Language',
+  'AB Literature',
+  'AB Philosophy',
+  'AB Psychology',
+  'AB Sociology',
+  'BS Biology',
+  'BS Chemistry',
+  'BS Marine Biology',
+  'BS Mathematics',
+  'BS Psychology',
+  'BS Accountancy',
+  'BS Business Administration',
+  'BS Management Accounting',
+  'BS Computer Science',
+  'BS Information Systems',
+  'BS Information Technology',
+  'BS Entertainment & Multimedia Computing',
+  'Bachelor of Early Childhood Education',
+  'Bachelor of Elementary Education',
+  'Bachelor of Special Needs Education',
+  'Bachelor of Technology and Livelihood Education',
+  'Bachelor of Secondary Education',
+  'BS Chemical Engineering',
+  'BS Civil Engineering',
+  'BS Electrical Engineering',
+  'BS Electronics Engineering',
+  'BS Industrial Engineering',
+  'BS Mechanical Engineering',
+  'BS Nursing'
 ];
 
 const auth = (req, res, next) => {
@@ -72,11 +114,56 @@ const escapeHtml = (value = '') => String(value)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+const applyCertificateTemplateFallback = async (certificate) => {
+  const certificateObject = typeof certificate.toObject === 'function' ? certificate.toObject() : { ...certificate };
+  if (certificateObject.certBgImgKey || certificateObject.certSigImgKey) return certificateObject;
+
+  const template = await CertificateTemplate.findOne({
+    $or: [
+      { templateTitle: certificateObject.eventName },
+      { certEventType: certificateObject.eventName }
+    ]
+  }).lean();
+
+  if (!template) return certificateObject;
+
+  return {
+    ...certificateObject,
+    templateTitle: certificateObject.templateTitle || template.templateTitle || '',
+    certBgImgKey: certificateObject.certBgImgKey || template.certBgImgKey || '',
+    certEventYearLevel: certificateObject.certEventYearLevel || template.certEventYearLevel || '',
+    certEventType: certificateObject.certEventType || template.certEventType || '',
+    certEventTheme: certificateObject.certEventTheme || template.certEventTheme || '',
+    certEventVenue: certificateObject.certEventVenue || template.certEventVenue || '',
+    certDirectorName: certificateObject.certDirectorName || template.certDirectorName || '',
+    certSigImgKey: certificateObject.certSigImgKey || template.certSigImgKey || ''
+  };
+};
+
+const departmentGroups = [
+  ['Agriculture', 'BS Agribusiness', 'BS Agriculture', 'BS Agricultural & Biosystems Engineering', 'BS Food Technology', 'BS Development Communication'],
+  ['Arts and Science', 'Arts and Sciences', 'AB Economics', 'AB History', 'AB Interdisciplinary Studies', 'AB International Studies', 'AB English Language', 'AB Literature', 'AB Philosophy', 'AB Psychology', 'AB Sociology', 'BS Biology', 'BS Chemistry', 'BS Marine Biology', 'BS Mathematics', 'BS Psychology'],
+  ['Business Management', 'BS Accountancy', 'BS Business Administration', 'BS Management Accounting'],
+  ['Computer Studies', 'BS Computer Science', 'BS Information Systems', 'BS Information Technology', 'BS Entertainment & Multimedia Computing'],
+  ['Education', 'Bachelor of Early Childhood Education', 'Bachelor of Elementary Education', 'Bachelor of Special Needs Education', 'Bachelor of Technology and Livelihood Education', 'Bachelor of Secondary Education'],
+  ['Engineering', 'BS Chemical Engineering', 'BS Civil Engineering', 'BS Civil Engineerring', 'BS Electrical Engineering', 'BS Electronics Engineering', 'BS Industrial Engineering', 'BS Mechanical Engineering'],
+  ['Nursing', 'BS Nursing']
+];
+
+const getDepartmentMatchValues = (department = '') => {
+  const group = departmentGroups.find((items) => items.includes(department));
+  return [...new Set(group || [department])];
+};
+
+const departmentsAreInSameGroup = (first = '', second = '') => (
+  getDepartmentMatchValues(first).includes(second) || getDepartmentMatchValues(second).includes(first)
+);
+
 const getStudentsForRecollection = async (recollection) => {
   const yearPattern = `-${escapeRegex(recollection.yearLevel)}`;
   return User.find({
     role: 'student',
-    department: recollection.department,
+    department: { $in: getDepartmentMatchValues(recollection.department) },
     batch: { $regex: yearPattern },
     email: { $exists: true, $ne: '' }
   })
@@ -113,7 +200,7 @@ const notifyStudentsForRecollection = async (recollection) => {
       '',
       recollection.description || '',
       '',
-      'Please log in to the Campus Ministry System to view the schedule and register if needed.'
+      'Please log in to the Campus Ministries System to view the schedule and register if needed.'
     ].filter(Boolean).join('\n');
 
     const html = `
@@ -128,7 +215,7 @@ const notifyStudentsForRecollection = async (recollection) => {
         ${recollection.facilitator ? `<li><strong>Facilitator:</strong> ${escapeHtml(recollection.facilitator)}</li>` : ''}
       </ul>
       ${recollection.description ? `<p>${escapeHtml(recollection.description)}</p>` : ''}
-      <p>Please log in to the Campus Ministry System to view the schedule and register if needed.</p>
+      <p>Please log in to the Campus Ministries System to view the schedule and register if needed.</p>
     `;
 
     return sendEmail({
@@ -150,7 +237,22 @@ const notifyStudentsForRecollection = async (recollection) => {
   }, { matchedStudents: students.length, sent: 0, previewed: 0, failed: 0 });
 };
 
-const buildEventQuery = ({ keyword, startDate, endDate } = {}) => {
+const mapCmoEventToRecollection = (event) => {
+  if (!event) return null;
+  const plainEvent = typeof event.toObject === 'function' ? event.toObject() : event;
+  return {
+    ...plainEvent,
+    title: plainEvent.description || 'CMO Recollection Schedule',
+    description: plainEvent.description || '',
+    date: plainEvent.eventDate,
+    facilitator: plainEvent.inCharge || '',
+    slots: plainEvent.slots || 0,
+    participants: plainEvent.participants || [],
+    sourceType: 'cmo-event'
+  };
+};
+
+const buildEventQuery = ({ keyword, date, startDate, endDate } = {}) => {
   const query = {};
   if (keyword) {
     const regex = new RegExp(escapeRegex(keyword), 'i');
@@ -164,7 +266,12 @@ const buildEventQuery = ({ keyword, startDate, endDate } = {}) => {
     ];
   }
 
-  if (startDate || endDate) {
+  if (date) {
+    const selected = new Date(date);
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+    query.eventDate = { $gte: selected, $lte: end };
+  } else if (startDate || endDate) {
     query.eventDate = {};
     if (startDate) query.eventDate.$gte = new Date(startDate);
     if (endDate) {
@@ -184,6 +291,10 @@ const normalizeRole = (role = '') => {
   return 'student';
 };
 
+const MAIN_ADMIN_EMAIL = 'dfabela@xu.edu.ph';
+
+const isMainAdminAccount = (user = {}) => String(user.email || '').toLowerCase() === MAIN_ADMIN_EMAIL;
+
 const splitName = (fullName = '') => {
   const parts = String(fullName).trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return { firstName: '', lastName: '' };
@@ -191,7 +302,7 @@ const splitName = (fullName = '') => {
   return { firstName: parts.slice(0, -1).join(' '), lastName: parts[parts.length - 1] };
 };
 
-router.get('/dashboard-cards', [auth, adminAuth], async (req, res) => {
+router.get('/dashboard-cards', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const now = new Date();
     const nextWeek = new Date(now);
@@ -213,7 +324,7 @@ router.get('/dashboard-cards', [auth, adminAuth], async (req, res) => {
   }
 });
 
-router.get('/events', [auth, adminAuth], async (req, res) => {
+router.get('/events', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const page = Math.max(Number(req.query.page) || 1, 1);
     const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 100);
@@ -235,7 +346,7 @@ router.get('/events', [auth, adminAuth], async (req, res) => {
   }
 });
 
-router.post('/events', [auth, adminAuth], async (req, res) => {
+router.post('/events', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const required = ['eventDate', 'department', 'description', 'batch', 'yearLevel', 'venue', 'inCharge'];
     const missing = required.filter((field) => !req.body[field]);
@@ -251,8 +362,15 @@ router.post('/events', [auth, adminAuth], async (req, res) => {
       yearLevel: req.body.yearLevel,
       venue: req.body.venue,
       inCharge: req.body.inCharge,
+      slots: Math.max(Number(req.body.slots) || 40, 0),
       createdBy: req.user.id
     });
+
+    try {
+      await notifyStudentsForRecollection(mapCmoEventToRecollection(event));
+    } catch (notificationError) {
+      console.error('CMO event notification error:', notificationError);
+    }
 
     res.status(201).json(event);
   } catch (error) {
@@ -261,7 +379,7 @@ router.post('/events', [auth, adminAuth], async (req, res) => {
   }
 });
 
-router.put('/events/:id', [auth, adminAuth], async (req, res) => {
+router.put('/events/:id', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const event = await CmoEvent.findByIdAndUpdate(
       req.params.id,
@@ -272,7 +390,8 @@ router.put('/events/:id', [auth, adminAuth], async (req, res) => {
         batch: req.body.batch,
         yearLevel: req.body.yearLevel,
         venue: req.body.venue,
-        inCharge: req.body.inCharge
+        inCharge: req.body.inCharge,
+        slots: req.body.slots !== undefined ? Math.max(Number(req.body.slots) || 0, 0) : undefined
       },
       { new: true, runValidators: true }
     );
@@ -285,10 +404,14 @@ router.put('/events/:id', [auth, adminAuth], async (req, res) => {
   }
 });
 
-router.delete('/events/:id', [auth, adminAuth], async (req, res) => {
+router.delete('/events/:id', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const event = await CmoEvent.findByIdAndDelete(req.params.id);
     if (!event) return res.status(404).json({ message: 'Event not found' });
+    await User.updateMany(
+      { registeredRecollections: req.params.id },
+      { $pull: { registeredRecollections: req.params.id } }
+    );
     res.json({ message: 'Event deleted successfully' });
   } catch (error) {
     console.error('Delete event error:', error);
@@ -379,11 +502,21 @@ router.get('/student-profile/:studentId', [auth, adminOrFacultyAuth], async (req
     const certificates = (student.certificates || []).map((certificate) => ({
       certificateId: certificate._id,
       certificateURL: certificate.qrCode || '',
+      qrCode: certificate.qrCode || '',
+      qrData: certificate.qrData || '',
       eventName: certificate.eventName,
       eventDate: certificate.eventDate,
       DateGenerated: certificate.createdAt,
-      CreatedBy: certificate.issuedBy?.fullName || 'Campus Ministry',
-      status: certificate.status
+      CreatedBy: certificate.issuedBy?.fullName || 'Campus Ministries',
+      status: certificate.status,
+      templateTitle: certificate.templateTitle || '',
+      certBgImgKey: certificate.certBgImgKey || '',
+      certEventYearLevel: certificate.certEventYearLevel || '',
+      certEventType: certificate.certEventType || '',
+      certEventTheme: certificate.certEventTheme || '',
+      certEventVenue: certificate.certEventVenue || '',
+      certDirectorName: certificate.certDirectorName || '',
+      certSigImgKey: certificate.certSigImgKey || ''
     }));
 
     res.json({
@@ -550,21 +683,20 @@ router.get('/recollections', [auth, adminOrFacultyAuth], async (req, res) => {
 // Get one recollection schedule with registrants
 router.get('/recollections/:id', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
-    const faculty = await getFacultyScope(req);
-    const recollection = await Recollection.findById(req.params.id)
+    let recollection = await Recollection.findById(req.params.id)
       .populate('participants', 'fullName studentId email batch department')
       .sort({ date: 1 });
 
     if (!recollection) {
-      return res.status(404).json({ message: 'Recollection schedule not found' });
-    }
+      const event = await CmoEvent.findById(req.params.id)
+        .populate('participants', 'fullName studentId email batch department')
+        .lean();
 
-    if (faculty) {
-      const facultyYearLevel = String(faculty.batch || '').match(/-(\d)/)?.[1] || '';
-      if ((faculty.department && recollection.department !== faculty.department) ||
-        (facultyYearLevel && recollection.yearLevel !== facultyYearLevel)) {
-        return res.status(403).json({ message: 'Formator can only view recollections in their assigned scope' });
+      if (!event) {
+        return res.status(404).json({ message: 'Recollection schedule not found' });
       }
+
+      recollection = mapCmoEventToRecollection(event);
     }
 
     res.json(recollection);
@@ -650,24 +782,38 @@ router.delete('/recollections/:id', [auth, adminAuth], async (req, res) => {
 });
 
 // Generate certificate
-router.post('/certificates', [auth, adminAuth], async (req, res) => {
+router.post('/certificates', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
-    const { studentId, eventName, eventDate } = req.body;
+    const { studentId, eventName, eventDate, templateId } = req.body;
     
     const student = await User.findById(studentId);
     if (!student) return res.status(404).json({ message: 'Student not found' });
 
-    const qrData = `CERT:${student._id}:${Date.now()}:Xavier-eCMS`;
-    const qrCode = await QRCode.toDataURL(qrData);
+    const template = templateId ? await CertificateTemplate.findById(templateId).lean() : null;
 
     const certificate = new Certificate({
       student: studentId,
       eventName,
       eventDate: new Date(eventDate),
-      qrData,
-      qrCode,
       issuedBy: req.user.id,
-      status: 'issued'
+      status: 'issued',
+      templateTitle: template?.templateTitle || '',
+      certBgImgKey: template?.certBgImgKey || '',
+      certEventYearLevel: template?.certEventYearLevel || '',
+      certEventType: template?.certEventType || '',
+      certEventTheme: template?.certEventTheme || '',
+      certEventVenue: template?.certEventVenue || '',
+      certDirectorName: template?.certDirectorName || '',
+      certSigImgKey: template?.certSigImgKey || ''
+    });
+
+    certificate.qrData = `CERT:${certificate._id}:${student._id}:Xavier-eCMS`;
+    certificate.qrCode = await QRCode.toDataURL(certificate.qrData, {
+      margin: 1,
+      color: {
+        dark: '#111111',
+        light: '#00000000'
+      }
     });
 
     await certificate.save();
@@ -706,8 +852,10 @@ router.post('/certificates/verify', [auth, adminOrFacultyAuth], async (req, res)
     }
 
     if (scannedCode.startsWith('CERT:')) {
-      const [, studentId, timestamp] = scannedCode.split(':');
-      if (timestamp) query.$or.push({ qrData: { $regex: `^CERT:${escapeRegex(studentId || '')}:${escapeRegex(timestamp)}:` } });
+      const [, firstPart, secondPart] = scannedCode.split(':');
+      if (firstPart && secondPart) {
+        query.$or.push({ qrData: { $regex: `^CERT:${escapeRegex(firstPart)}:${escapeRegex(secondPart)}:` } });
+      }
     }
 
     const certificate = await Certificate.findOne(query)
@@ -723,10 +871,12 @@ router.post('/certificates/verify', [auth, adminOrFacultyAuth], async (req, res)
       await certificate.save();
     }
 
+    const certificateWithTemplate = await applyCertificateTemplateFallback(certificate);
+
     res.json({
       valid: true,
       message: 'Certificate verified successfully',
-      certificate
+      certificate: certificateWithTemplate
     });
   } catch (error) {
     console.error('Verify certificate error:', error);
@@ -868,19 +1018,11 @@ router.get('/export-csv', [auth, adminAuth], async (req, res) => {
 router.get('/students', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const { batch, yearLevel, completionStatus } = req.query;
-    const faculty = await getFacultyScope(req);
-    const query = applyFacultyStudentScope({ role: 'student' }, faculty);
+    const query = { role: 'student' };
 
     if (batch) {
-      if (!ensureFacultyBatchAccess(faculty, batch)) {
-        return res.status(403).json({ message: 'Formator can only view students in their assigned scope' });
-      }
       query.batch = { $regex: `^${escapeRegex(batch)}` };
-    } else if (yearLevel && !faculty?.batch) {
-      const facultyYearLevel = String(faculty?.batch || '').match(/-(\d)/)?.[1] || '';
-      if (facultyYearLevel && String(yearLevel) !== facultyYearLevel) {
-        return res.status(403).json({ message: 'Formator can only view students in their assigned year level' });
-      }
+    } else if (yearLevel) {
       query.batch = { $regex: `-${yearLevel}` };
     }
 
@@ -927,6 +1069,19 @@ router.get('/students', [auth, adminOrFacultyAuth], async (req, res) => {
     res.json(students);
   } catch (error) {
     console.error('Students error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get('/formators', [auth, adminOrFacultyAuth], async (req, res) => {
+  try {
+    const formators = await User.find({ role: 'staff', status: { $ne: 'inactive' } })
+      .select('fullName email department batch')
+      .sort({ fullName: 1, email: 1 })
+      .lean();
+    res.json(formators);
+  } catch (error) {
+    console.error('Formators error:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -989,6 +1144,23 @@ router.post('/users', [auth, adminAuth], async (req, res) => {
 router.put('/users/:id', [auth, adminAuth], async (req, res) => {
   try {
     const { fullName, username, email, password, role, status, department, batch } = req.body;
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (isMainAdminAccount(user)) {
+      if (String(req.user.id) !== String(user._id)) {
+        return res.status(403).json({ message: 'Only the main admin can update the main admin account' });
+      }
+
+      const nextEmail = email ? String(email).toLowerCase() : user.email;
+      const nextRole = role ? normalizeRole(role) : user.role;
+      const nextStatus = status && ['active', 'inactive'].includes(status) ? status : user.status;
+
+      if (nextEmail !== user.email || nextRole !== 'admin' || nextStatus !== 'active') {
+        return res.status(403).json({ message: 'Main admin role, email, and active status cannot be changed' });
+      }
+    }
+
     const updates = {
       ...(fullName || username ? { fullName: fullName || username } : {}),
       ...(email ? { email: String(email).toLowerCase() } : {}),
@@ -997,9 +1169,6 @@ router.put('/users/:id', [auth, adminAuth], async (req, res) => {
       ...(department !== undefined ? { department } : {}),
       ...(batch !== undefined ? { batch } : {})
     };
-
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
 
     Object.assign(user, updates);
     if (password) user.password = password;
@@ -1027,8 +1196,14 @@ router.delete('/users/:id', [auth, adminAuth], async (req, res) => {
       return res.status(400).json({ message: 'You cannot delete your own account' });
     }
 
-    const user = await User.findByIdAndDelete(req.params.id);
+    const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (isMainAdminAccount(user)) {
+      return res.status(403).json({ message: 'Main admin account cannot be deleted' });
+    }
+
+    await User.findByIdAndDelete(req.params.id);
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     console.error('Delete user error:', error);
@@ -1036,7 +1211,7 @@ router.delete('/users/:id', [auth, adminAuth], async (req, res) => {
   }
 });
 
-router.post('/students', [auth, adminAuth], async (req, res) => {
+router.post('/students', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const { studentId, college, department, major, email, firstName, lastName, yearStanding } = req.body;
     if (!studentId || !department || !email || !firstName || !lastName || !yearStanding) {
@@ -1069,7 +1244,7 @@ router.post('/students', [auth, adminAuth], async (req, res) => {
   }
 });
 
-router.put('/students/:id', [auth, adminAuth], async (req, res) => {
+router.put('/students/:id', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const { college, department, major, email, firstName, lastName, yearStanding } = req.body;
     const student = await User.findById(req.params.id);
@@ -1094,7 +1269,7 @@ router.put('/students/:id', [auth, adminAuth], async (req, res) => {
   }
 });
 
-router.delete('/students/:id', [auth, adminAuth], async (req, res) => {
+router.delete('/students/:id', [auth, adminOrFacultyAuth], async (req, res) => {
   try {
     const student = await User.findOneAndDelete({ _id: req.params.id, role: 'student' });
     if (!student) return res.status(404).json({ message: 'Student not found' });
@@ -1118,5 +1293,699 @@ router.get('/certificates', [auth, adminAuth], async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+return router;
+})();
+
+const facultyRouter = (() => {
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const Evaluation = require('../models/Evaluation');
+const User = require('../models/userSchema');
+const Recollection = require('../models/Recollection');
+const CertificateRecommendation = require('../models/CertificateRecommendation');
+
+const router = express.Router();
+
+const auth = (req, res, next) => {
+  const token = req.header('Authorization')?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ message: 'No token' });
+
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
+const facultyAuth = (req, res, next) => {
+  if (req.user.role !== 'staff') {
+    return res.status(403).json({ message: 'Formator access required' });
+  }
+  next();
+};
+
+const getYearLevelFromBatch = (batch = '') => {
+  const match = String(batch).match(/-(\d)/);
+  return match ? match[1] : '';
+};
+
+const buildStudentScope = (faculty) => {
+  const scope = { role: 'student' };
+  if (faculty.department) scope.department = faculty.department;
+  if (faculty.batch) scope.batch = { $regex: `^${faculty.batch}` };
+  return scope;
+};
+
+router.get('/dashboard', [auth, facultyAuth], async (req, res) => {
+  try {
+    const faculty = await User.findById(req.user.id).select('fullName email department batch');
+    if (!faculty) return res.status(404).json({ message: 'Formator not found' });
+
+    const studentScope = buildStudentScope(faculty);
+    const students = await User.find(studentScope)
+      .select('fullName studentId email batch department certificates')
+      .sort({ fullName: 1 })
+      .lean();
+
+    const studentIds = students.map((student) => student._id);
+    const evaluations = await Evaluation.find({
+      $or: [
+        { assignedStudents: { $in: studentIds } },
+        ...(faculty.batch ? [{ batch: { $regex: `^${faculty.batch}` } }] : [])
+      ]
+    })
+      .populate('createdBy', 'fullName')
+      .sort({ dueDate: 1 })
+      .lean();
+
+    const completionByStudent = new Map(students.map((student) => [student._id.toString(), 0]));
+    evaluations.forEach((evaluation) => {
+      (evaluation.submissions || []).forEach((submission) => {
+        const studentId = submission.student?.toString();
+        if (completionByStudent.has(studentId)) {
+          completionByStudent.set(studentId, completionByStudent.get(studentId) + 1);
+        }
+      });
+    });
+
+    const studentsWithProgress = students.map((student) => {
+      const completedEvaluations = completionByStudent.get(student._id.toString()) || 0;
+      return {
+        ...student,
+        completedEvaluations,
+        certificateCount: student.certificates?.length || 0
+      };
+    });
+
+    const completedStudents = studentsWithProgress.filter((student) => student.completedEvaluations > 0).length;
+    const pendingStudents = Math.max(studentsWithProgress.length - completedStudents, 0);
+
+    const yearLevel = getYearLevelFromBatch(faculty.batch);
+    const recollectionQuery = {
+      date: { $gte: new Date() },
+      ...(faculty.department ? { department: faculty.department } : {}),
+      ...(yearLevel ? { yearLevel } : {})
+    };
+    const recollections = await Recollection.find(recollectionQuery)
+      .populate('participants', 'fullName studentId batch department')
+      .sort({ date: 1 })
+      .lean();
+
+    const recommendations = await CertificateRecommendation.find({ recommendedBy: req.user.id })
+      .populate('student', 'fullName studentId batch department')
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    res.json({
+      faculty: {
+        fullName: faculty.fullName,
+        email: faculty.email,
+        department: faculty.department || '',
+        batch: faculty.batch || ''
+      },
+      stats: {
+        assignedStudents: studentsWithProgress.length,
+        completedStudents,
+        pendingStudents,
+        scopedEvaluations: evaluations.length,
+        upcomingRecollections: recollections.length,
+        recommendations: recommendations.length
+      },
+      students: studentsWithProgress,
+      evaluations: evaluations.map((evaluation) => ({
+        _id: evaluation._id,
+        title: evaluation.title,
+        batch: evaluation.batch,
+        dueDate: evaluation.dueDate,
+        assignedCount: evaluation.assignedStudents?.length || 0,
+        submissionCount: evaluation.submissions?.length || 0,
+        createdBy: evaluation.createdBy
+      })),
+      recollections: recollections.map((recollection) => ({
+        ...recollection,
+        participantCount: recollection.participants?.length || 0
+      })),
+      recommendations
+    });
+  } catch (error) {
+    console.error('Formator dashboard error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post('/certificate-recommendations', [auth, facultyAuth], async (req, res) => {
+  try {
+    const faculty = await User.findById(req.user.id).select('department batch');
+    const student = await User.findOne({
+      _id: req.body.studentId,
+      ...buildStudentScope(faculty)
+    });
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student is not in your assigned scope' });
+    }
+
+    const recommendation = await CertificateRecommendation.findOneAndUpdate(
+      { student: student._id, recommendedBy: req.user.id, status: 'pending' },
+      {
+        student: student._id,
+        recommendedBy: req.user.id,
+        reason: req.body.reason || 'Completed assigned evaluation requirements',
+        status: 'pending'
+      },
+      { upsert: true, new: true }
+    ).populate('student', 'fullName studentId batch department');
+
+    res.status(201).json({
+      message: 'Certificate recommendation sent to admin',
+      recommendation
+    });
+  } catch (error) {
+    console.error('Certificate recommendation error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+return router;
+})();
+
+const studentRouter = (() => {
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const Evaluation = require('../models/Evaluation');
+const Certificate = require('../models/certificatesSchema');
+const CertificateTemplate = require('../models/certTemplateSchema');
+const User = require('../models/userSchema');
+const Recollection = require('../models/Recollection');
+const CmoEvent = require('../models/eventsSchema');
+const router = express.Router();
+
+const getYearLevelFromBatch = (batch = '') => {
+  const match = String(batch).match(/-(\d)/);
+  return match ? match[1] : '';
+};
+
+const inferDepartmentFromBatch = (batch = '') => {
+  if (/^BSIT-|^BSCS-|^BSIS-/.test(batch)) return 'Computer Studies';
+  if (/^ABCom-/.test(batch)) return 'Arts and Science';
+  return '';
+};
+
+const getStudentDepartment = (user) => user?.department || inferDepartmentFromBatch(user?.batch || '');
+
+const departments = [
+  'Agriculture',
+  'Arts and Science',
+  'Business Management',
+  'Computer Studies',
+  'Education',
+  'Engineering',
+  'Nursing',
+  'BS Agribusiness',
+  'BS Agriculture',
+  'BS Agricultural & Biosystems Engineering',
+  'BS Food Technology',
+  'BS Development Communication',
+  'AB Economics',
+  'AB History',
+  'AB Interdisciplinary Studies',
+  'AB International Studies',
+  'AB English Language',
+  'AB Literature',
+  'AB Philosophy',
+  'AB Psychology',
+  'AB Sociology',
+  'BS Biology',
+  'BS Chemistry',
+  'BS Marine Biology',
+  'BS Mathematics',
+  'BS Psychology',
+  'BS Accountancy',
+  'BS Business Administration',
+  'BS Management Accounting',
+  'BS Computer Science',
+  'BS Information Systems',
+  'BS Information Technology',
+  'BS Entertainment & Multimedia Computing',
+  'Bachelor of Early Childhood Education',
+  'Bachelor of Elementary Education',
+  'Bachelor of Special Needs Education',
+  'Bachelor of Technology and Livelihood Education',
+  'Bachelor of Secondary Education',
+  'BS Chemical Engineering',
+  'BS Civil Engineering',
+  'BS Electrical Engineering',
+  'BS Electronics Engineering',
+  'BS Industrial Engineering',
+  'BS Mechanical Engineering',
+  'BS Nursing'
+];
+
+const courses = ['BSIT', 'BSCS', 'BSIS', 'ABCom'];
+const RECENT_SCHEDULE_WINDOW_HOURS = 168;
+
+const getCourseFromBatch = (batch = '') => {
+  const match = String(batch).match(/^([A-Za-z]+)-/);
+  return match ? match[1] : '';
+};
+
+const studentColleges = [
+  {
+    value: 'Agriculture',
+    departments: ['BS Agribusiness', 'BS Agriculture', 'BS Agricultural & Biosystems Engineering', 'BS Food Technology', 'BS Development Communication', 'Agriculture']
+  },
+  {
+    value: 'Arts Science',
+    departments: ['AB Economics', 'AB History', 'AB Interdisciplinary Studies', 'AB International Studies', 'AB English Language', 'AB Literature', 'AB Philosophy', 'AB Psychology', 'AB Sociology', 'BS Biology', 'BS Chemistry', 'BS Marine Biology', 'BS Mathematics', 'BS Psychology', 'Arts and Science', 'Arts and Sciences']
+  },
+  {
+    value: 'Business Management',
+    departments: ['BS Accountancy', 'BS Business Administration', 'BS Management Accounting', 'Business Management']
+  },
+  {
+    value: 'Computer Studies',
+    departments: ['BS Computer Science', 'BS Information Systems', 'BS Information Technology', 'BS Entertainment & Multimedia Computing', 'Computer Studies']
+  },
+  {
+    value: 'Education',
+    departments: ['Bachelor of Early Childhood Education', 'Bachelor of Elementary Education', 'Bachelor of Special Needs Education', 'Bachelor of Technology and Livelihood Education', 'Bachelor of Secondary Education', 'Education']
+  },
+  {
+    value: 'Engineering',
+    departments: ['BS Chemical Engineering', 'BS Civil Engineering', 'BS Civil Engineerring', 'BS Electrical Engineering', 'BS Electronics Engineering', 'BS Industrial Engineering', 'BS Mechanical Engineering', 'Engineering']
+  },
+  {
+    value: 'Nursing',
+    departments: ['BS Nursing', 'Nursing']
+  }
+];
+
+const getCollegeForStudentDepartment = (department = '') => (
+  studentColleges.find((college) => college.departments.includes(department))?.value || ''
+);
+
+const isValidCollegeDepartment = (college = '', department = '') => (
+  studentColleges.some((item) => item.value === college && item.departments.includes(department))
+);
+
+const studentDepartmentGroups = [
+  ['Agriculture', 'BS Agribusiness', 'BS Agriculture', 'BS Agricultural & Biosystems Engineering', 'BS Food Technology', 'BS Development Communication'],
+  ['Arts and Science', 'Arts and Sciences', 'AB Economics', 'AB History', 'AB Interdisciplinary Studies', 'AB International Studies', 'AB English Language', 'AB Literature', 'AB Philosophy', 'AB Psychology', 'AB Sociology', 'BS Biology', 'BS Chemistry', 'BS Marine Biology', 'BS Mathematics', 'BS Psychology'],
+  ['Business Management', 'BS Accountancy', 'BS Business Administration', 'BS Management Accounting'],
+  ['Computer Studies', 'BS Computer Science', 'BS Information Systems', 'BS Information Technology', 'BS Entertainment & Multimedia Computing'],
+  ['Education', 'Bachelor of Early Childhood Education', 'Bachelor of Elementary Education', 'Bachelor of Special Needs Education', 'Bachelor of Technology and Livelihood Education', 'Bachelor of Secondary Education'],
+  ['Engineering', 'BS Chemical Engineering', 'BS Civil Engineering', 'BS Civil Engineerring', 'BS Electrical Engineering', 'BS Electronics Engineering', 'BS Industrial Engineering', 'BS Mechanical Engineering'],
+  ['Nursing', 'BS Nursing']
+];
+
+const getStudentDepartmentMatchValues = (department = '') => {
+  const group = studentDepartmentGroups.find((items) => items.includes(department));
+  return [...new Set(group || [department])];
+};
+
+const mapStudentCmoEventToSchedule = (event, studentId) => {
+  const participants = event.participants || [];
+  return {
+    ...event.toObject(),
+    title: event.description || 'CMO Recollection Schedule',
+    description: event.description || '',
+    date: event.eventDate,
+    facilitator: event.inCharge || '',
+    slots: event.slots || 0,
+    participantCount: participants.length,
+    isRegistered: participants.some((participantId) => participantId.toString() === studentId),
+    sourceType: 'cmo-event'
+  };
+};
+
+const buildStudentProfile = (user) => {
+  const batch = user?.batch || '';
+  const department = getStudentDepartment(user);
+  const yearLevel = getYearLevelFromBatch(batch);
+  const college = user?.college || getCollegeForStudentDepartment(department);
+
+  return {
+    fullName: user?.fullName || '',
+    email: user?.email || '',
+    studentId: user?.studentId || '',
+    college,
+    department,
+    yearLevel,
+    batch,
+    profileComplete: Boolean(college && department && yearLevel)
+  };
+};
+
+const applyStudentCertificateTemplateFallback = async (certificate) => {
+  const certificateObject = typeof certificate.toObject === 'function' ? certificate.toObject() : { ...certificate };
+  if (certificateObject.certBgImgKey || certificateObject.certSigImgKey) return certificateObject;
+
+  const template = await CertificateTemplate.findOne({
+    $or: [
+      { templateTitle: certificateObject.eventName },
+      { certEventType: certificateObject.eventName }
+    ]
+  }).lean();
+
+  if (!template) return certificateObject;
+
+  return {
+    ...certificateObject,
+    templateTitle: certificateObject.templateTitle || template.templateTitle || '',
+    certBgImgKey: certificateObject.certBgImgKey || template.certBgImgKey || '',
+    certEventYearLevel: certificateObject.certEventYearLevel || template.certEventYearLevel || '',
+    certEventType: certificateObject.certEventType || template.certEventType || '',
+    certEventTheme: certificateObject.certEventTheme || template.certEventTheme || '',
+    certEventVenue: certificateObject.certEventVenue || template.certEventVenue || '',
+    certDirectorName: certificateObject.certDirectorName || template.certDirectorName || '',
+    certSigImgKey: certificateObject.certSigImgKey || template.certSigImgKey || ''
+  };
+};
+
+const auth = (req, res, next) => {
+  const token = req.header('Authorization')?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ message: 'No token' });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
+router.get('/dashboard', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).populate('assignedEvaluations certificates');
+    if (!user) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    const studentYearLevel = getYearLevelFromBatch(user?.batch);
+    const studentDepartment = getStudentDepartment(user);
+    const matchingDepartments = getStudentDepartmentMatchValues(studentDepartment);
+    
+    // Get evaluations assigned to this student that haven't been submitted
+    const evaluations = await Evaluation.find({
+      assignedStudents: req.user.id,
+      submissions: { $not: { $elemMatch: { student: req.user.id } } }
+    }).populate('createdBy', 'fullName');
+
+    // Also get evaluations that might be available for self-enrollment
+    const availableEvaluations = await Evaluation.find({
+      _id: { $nin: user.assignedEvaluations || [] },
+      dueDate: { $gte: new Date() }
+    }).populate('createdBy', 'fullName');
+
+    const cmoEvents = await CmoEvent.find({
+      eventDate: { $gte: new Date() },
+      department: { $in: matchingDepartments },
+      yearLevel: studentYearLevel
+    }).sort({ eventDate: 1 });
+
+    const cmoEventSchedules = cmoEvents.map((event) => mapStudentCmoEventToSchedule(event, req.user.id));
+    const recollectionSchedules = cmoEventSchedules
+      .sort((first, second) => new Date(first.date) - new Date(second.date));
+
+    const recentScheduleThreshold = new Date(Date.now() - RECENT_SCHEDULE_WINDOW_HOURS * 60 * 60 * 1000);
+    const newScheduleNotifications = recollectionSchedules
+      .filter((schedule) => new Date(schedule.createdAt) >= recentScheduleThreshold)
+      .map((schedule) => ({
+        _id: schedule._id,
+        title: schedule.title,
+        date: schedule.date,
+        venue: schedule.venue,
+        description: schedule.description || '',
+        message: `New recollection available for ${schedule.department} Year ${schedule.yearLevel}.`,
+        isRegistered: schedule.isRegistered
+      }));
+
+    const certificateRows = await Promise.all((user.certificates || []).map(async (certificate) => {
+      const certificateWithTemplate = await applyStudentCertificateTemplateFallback(certificate);
+      return {
+      ...certificateWithTemplate,
+      studentName: user.fullName,
+      studentId: user.studentId,
+      studentEmail: user.email,
+      studentDepartment: user.department,
+      studentCollege: user.college,
+      studentYearStanding: user.yearStanding || getYearLevelFromBatch(user.batch)
+      };
+    }));
+
+    res.json({
+      profile: buildStudentProfile(user),
+      announcements: [
+        "Welcome back to Campus Ministries!",
+        "Complete your evaluations before the deadline",
+        "Check your certificates below"
+      ],
+      pendingEvaluations: evaluations,
+      availableEvaluations: availableEvaluations,
+      recollectionSchedules,
+      newScheduleNotifications,
+      certificates: certificateRows
+    });
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get('/profile', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    res.json(buildStudentProfile(user));
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.put('/profile', auth, async (req, res) => {
+  try {
+    const { college, department, yearLevel } = req.body;
+
+    if (!studentColleges.some((item) => item.value === college)) {
+      return res.status(400).json({ message: 'Please select a valid college' });
+    }
+
+    if (!isValidCollegeDepartment(college, department)) {
+      return res.status(400).json({ message: 'Please select a valid department for the selected college' });
+    }
+
+    if (!['1', '2', '3', '4'].includes(String(yearLevel))) {
+      return res.status(400).json({ message: 'Please select a valid year level' });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        college,
+        department,
+        yearStanding: String(yearLevel),
+        batch: `${department}-${yearLevel}`
+      },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    res.json({
+      message: 'Profile updated successfully',
+      profile: buildStudentProfile(user),
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        fullName: user.fullName,
+        studentId: user.studentId,
+        college: user.college || '',
+        department: user.department || '',
+        batch: user.batch || ''
+      }
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Participate in a recollection schedule
+router.post('/recollections/:id/participate', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('batch department');
+    const studentYearLevel = getYearLevelFromBatch(user?.batch);
+    const studentDepartment = getStudentDepartment(user);
+    const matchingDepartments = getStudentDepartmentMatchValues(studentDepartment);
+    let recollection = await Recollection.findById(req.params.id);
+    let scheduleType = 'recollection';
+
+    if (!recollection) {
+      recollection = await CmoEvent.findById(req.params.id);
+      scheduleType = 'cmo-event';
+    }
+
+    if (!recollection) {
+      return res.status(404).json({ message: 'Recollection schedule not found' });
+    }
+
+    const scheduleDate = recollection.date || recollection.eventDate;
+    const participants = recollection.participants || [];
+
+    if (new Date(scheduleDate) < new Date()) {
+      return res.status(400).json({ message: 'This recollection schedule has already passed' });
+    }
+
+    if (recollection.yearLevel !== studentYearLevel) {
+      return res.status(403).json({ message: 'This recollection is not assigned to your year level' });
+    }
+
+    if (!matchingDepartments.includes(recollection.department)) {
+      return res.status(403).json({ message: 'This recollection is not assigned to your department' });
+    }
+
+    const alreadyRegistered = participants.some(
+      participantId => participantId.toString() === req.user.id
+    );
+
+    if (alreadyRegistered) {
+      return res.status(400).json({ message: 'Already registered for this recollection' });
+    }
+
+    if (recollection.slots && participants.length >= recollection.slots) {
+      return res.status(400).json({ message: 'This recollection schedule is already full' });
+    }
+
+    recollection.participants = participants;
+    recollection.participants.push(req.user.id);
+    await recollection.save();
+
+    await User.findByIdAndUpdate(req.user.id, {
+      $addToSet: { registeredRecollections: recollection._id }
+    });
+
+    res.json({
+      message: 'Successfully registered for recollection',
+      recollection: scheduleType === 'cmo-event' ? {
+        ...recollection.toObject(),
+        date: recollection.eventDate,
+        title: recollection.description,
+        facilitator: recollection.inCharge,
+        sourceType: scheduleType
+      } : recollection
+    });
+  } catch (error) {
+    console.error('Participate recollection error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Self-enroll in an evaluation
+router.post('/evaluations/:id/enroll', auth, async (req, res) => {
+  try {
+    const evaluation = await Evaluation.findById(req.params.id);
+    if (!evaluation) {
+      return res.status(404).json({ message: 'Evaluation not found' });
+    }
+
+    // Check if already enrolled
+    const alreadyEnrolled = evaluation.assignedStudents.some(
+      studentId => studentId.toString() === req.user.id
+    );
+
+    if (alreadyEnrolled) {
+      return res.status(400).json({ message: 'Already enrolled in this evaluation' });
+    }
+
+    // Add student to evaluation
+    evaluation.assignedStudents.push(req.user.id);
+    await evaluation.save();
+
+    // Add evaluation to student's assigned list
+    await User.findByIdAndUpdate(req.user.id, {
+      $addToSet: { assignedEvaluations: evaluation._id }
+    });
+
+    res.json({ message: 'Successfully enrolled in evaluation', evaluation });
+  } catch (error) {
+    console.error('Enroll error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post('/evaluations/:id/submit', auth, async (req, res) => {
+  try {
+    const evaluation = await Evaluation.findById(req.params.id);
+    if (!evaluation) {
+      return res.status(404).json({ message: 'Evaluation not found' });
+    }
+
+    const isAssigned = evaluation.assignedStudents.some(
+      studentId => studentId.toString() === req.user.id
+    );
+
+    if (!isAssigned) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    const alreadySubmitted = evaluation.submissions.some(
+      submission => submission.student?.toString() === req.user.id
+    );
+
+    if (alreadySubmitted) {
+      return res.status(400).json({ message: 'Evaluation already submitted' });
+    }
+
+    evaluation.submissions.push({
+      student: req.user.id,
+      answers: req.body.answers
+    });
+
+    await evaluation.save();
+    
+    await User.findByIdAndUpdate(req.user.id, {
+      $pull: { assignedEvaluations: req.params.id }
+    });
+
+    res.json({ message: 'Evaluation submitted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+return router;
+})();
+
+router.get('/', (req, res) => {
+  res.json({
+    message: 'User route is live.',
+    routes: {
+      admin: '/api/user/admin',
+      faculty: '/api/user/faculty',
+      formator: '/api/user/formator',
+      student: '/api/user/student'
+    }
+  });
+});
+
+router.use('/admin', adminRouter);
+router.use('/faculty', facultyRouter);
+router.use('/formator', facultyRouter);
+router.use('/student', studentRouter);
+
+router.adminRouter = adminRouter;
+router.facultyRouter = facultyRouter;
+router.studentRouter = studentRouter;
 
 module.exports = router;

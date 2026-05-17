@@ -7,7 +7,6 @@ const emptyStudent = {
   studentId: '',
   college: '',
   department: '',
-  major: '',
   email: '',
   firstName: '',
   lastName: '',
@@ -15,15 +14,69 @@ const emptyStudent = {
 };
 
 const colleges = [
-  { name: 'AGRICULTURE', value: 'Agriculture', department: 'Agriculture' },
-  { name: 'ARTS & SCIENCES', value: 'Arts and Sciences', department: 'Arts and Science' },
-  { name: 'BUSINESS MANAGEMENT', value: 'Business Management', department: 'Business Management' },
-  { name: 'COMPUTER STUDIES', value: 'Computer Studies', department: 'Computer Studies' },
-  { name: 'EDUCATION', value: 'Education', department: 'Education' },
-  { name: 'ENGINEERING', value: 'Engineering', department: 'Engineering' },
-  { name: 'NURSING', value: 'Nursing', department: 'Nursing' }
+  {
+    key: 'Agriculture',
+    name: 'AGRICULTURE',
+    value: 'Agriculture',
+    departments: ['BS Agribusiness', 'BS Agriculture', 'BS Agricultural & Biosystems Engineering', 'BS Food Technology', 'BS Development Communication'],
+    legacyDepartments: ['Agriculture']
+  },
+  {
+    key: 'ArtsScience',
+    name: 'ARTS & SCIENCES',
+    value: 'Arts Science',
+    departments: ['AB Economics', 'AB History', 'AB Interdisciplinary Studies', 'AB International Studies', 'AB English Language', 'AB Literature', 'AB Philosophy', 'AB Psychology', 'AB Sociology', 'BS Biology', 'BS Chemistry', 'BS Marine Biology', 'BS Mathematics', 'BS Psychology'],
+    legacyDepartments: ['Arts and Science', 'Arts and Sciences']
+  },
+  {
+    key: 'BusinessManagement',
+    name: 'BUSINESS MANAGEMENT',
+    value: 'Business Management',
+    departments: ['BS Accountancy', 'BS Business Administration', 'BS Management Accounting'],
+    legacyDepartments: ['Business Management']
+  },
+  {
+    key: 'ComputerStudies',
+    name: 'COMPUTER STUDIES',
+    value: 'Computer Studies',
+    departments: ['BS Computer Science', 'BS Information Systems', 'BS Information Technology', 'BS Entertainment & Multimedia Computing'],
+    legacyDepartments: ['Computer Studies']
+  },
+  {
+    key: 'Education',
+    name: 'EDUCATION',
+    value: 'Education',
+    departments: ['Bachelor of Early Childhood Education', 'Bachelor of Elementary Education', 'Bachelor of Special Needs Education', 'Bachelor of Technology and Livelihood Education', 'Bachelor of Secondary Education'],
+    legacyDepartments: ['Education']
+  },
+  {
+    key: 'Engineering',
+    name: 'ENGINEERING',
+    value: 'Engineering',
+    departments: ['BS Chemical Engineering', 'BS Civil Engineering', 'BS Electrical Engineering', 'BS Electronics Engineering', 'BS Industrial Engineering', 'BS Mechanical Engineering'],
+    legacyDepartments: ['Engineering', 'BS Civil Engineerring']
+  },
+  {
+    key: 'Nursing',
+    name: 'NURSING',
+    value: 'Nursing',
+    departments: ['BS Nursing'],
+    legacyDepartments: ['Nursing']
+  }
 ];
-const departments = ['Computer Studies', 'Arts and Science', 'Business Management', 'Engineering', 'Nursing', 'Education', 'Agriculture'];
+
+const departmentBelongsToCollege = (student, college) => {
+  if (!college) return true;
+  const allowed = [...college.departments, ...(college.legacyDepartments || [])];
+  return allowed.includes(student.department) || student.college === college.value || student.college === college.key;
+};
+
+const getDepartmentOptions = (college) => college?.departments || [];
+
+const getCollegeForStudent = (student) => {
+  if (!student) return null;
+  return colleges.find((college) => departmentBelongsToCollege(student, college)) || null;
+};
 
 const StudentRecords = () => {
   const navigate = useNavigate();
@@ -34,6 +87,7 @@ const StudentRecords = () => {
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [selectedCollege, setSelectedCollege] = useState(null);
   const [modal, setModal] = useState({ open: false, mode: 'add', student: null });
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [formData, setFormData] = useState(emptyStudent);
 
   const fetchStudents = async () => {
@@ -54,11 +108,10 @@ const StudentRecords = () => {
   const filteredStudents = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return students.filter((student) => {
-      const collegeDepartment = selectedCollege?.department;
-      const matchesCollege = collegeDepartment ? student.department === collegeDepartment || student.college === selectedCollege.value : true;
+      const matchesCollege = departmentBelongsToCollege(student, selectedCollege);
       const matchesDepartment = departmentFilter ? student.department === departmentFilter : true;
       const matchesSearch = keyword
-        ? [student.fullName, student.email, student.studentId, student.department, student.major].some((value) =>
+        ? [student.fullName, student.email, student.studentId, student.department].some((value) =>
             String(value || '').toLowerCase().includes(keyword)
           )
         : true;
@@ -67,9 +120,7 @@ const StudentRecords = () => {
   }, [students, search, departmentFilter, selectedCollege]);
 
   const selectedCollegeStudents = students.filter((student) => (
-    selectedCollege
-      ? student.department === selectedCollege.department || student.college === selectedCollege.value
-      : true
+    departmentBelongsToCollege(student, selectedCollege)
   ));
 
   const stats = [
@@ -83,17 +134,17 @@ const StudentRecords = () => {
     setFormData({
       ...emptyStudent,
       college: selectedCollege?.value || '',
-      department: selectedCollege?.department || ''
+      department: ''
     });
     setModal({ open: true, mode: 'add', student: null });
   };
 
   const openEdit = (student) => {
+    const studentCollege = getCollegeForStudent(student) || selectedCollege;
     setFormData({
       studentId: student.studentId || '',
-      college: student.college || '',
+      college: studentCollege?.value || student.college || '',
       department: student.department || '',
-      major: student.major || '',
       email: student.email || '',
       firstName: student.firstName || String(student.fullName || '').split(' ').slice(0, -1).join(' '),
       lastName: student.lastName || String(student.fullName || '').split(' ').slice(-1)[0] || '',
@@ -127,11 +178,12 @@ const StudentRecords = () => {
 
     setSaving(true);
     try {
+      const payload = { ...formData, college: selectedCollege?.value || formData.college, major: '' };
       if (modal.mode === 'edit' && modal.student?._id) {
-        await api.put(`/admin/students/${modal.student._id}`, formData);
+        await api.put(`/admin/students/${modal.student._id}`, payload);
         toast.success('Student updated successfully');
       } else {
-        await api.post('/admin/students', formData);
+        await api.post('/admin/students', payload);
         toast.success('Student created successfully');
       }
       closeModal();
@@ -143,11 +195,12 @@ const StudentRecords = () => {
     }
   };
 
-  const handleDelete = async (studentId) => {
-    if (!window.confirm('Delete this student? This cannot be undone.')) return;
+  const handleDelete = async () => {
+    if (!deleteTarget?._id) return;
     try {
-      await api.delete(`/admin/students/${studentId}`);
+      await api.delete(`/admin/students/${deleteTarget._id}`);
       toast.success('Student deleted successfully');
+      setDeleteTarget(null);
       fetchStudents();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to delete student');
@@ -192,7 +245,7 @@ const StudentRecords = () => {
                   </div>
                   <span>{college.name}</span>
                   <span className="mt-2 text-sm font-medium text-[#3a53a5]">
-                    {students.filter((student) => student.department === college.department || student.college === college.value).length} records
+                    {students.filter((student) => departmentBelongsToCollege(student, college)).length} records
                   </span>
                 </button>
               ))}
@@ -200,11 +253,7 @@ const StudentRecords = () => {
           </section>
         ) : (
           <>
-            <div className="flex flex-col justify-between gap-3 rounded-lg bg-white p-5 shadow-lg md:flex-row md:items-center">
-              <div>
-                <p className="text-sm font-semibold uppercase text-gray-500">Selected College</p>
-                <h2 className="text-2xl font-bold text-[#3a53a5]">{selectedCollege.name}</h2>
-              </div>
+            <div className="rounded-lg bg-white p-5 shadow-lg">
               <button
                 type="button"
                 onClick={() => {
@@ -212,10 +261,17 @@ const StudentRecords = () => {
                   setDepartmentFilter('');
                   setSearch('');
                 }}
-                className="bg-[#3a53a5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2a3a85]"
+                className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-[#3a53a5] hover:underline"
               >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
                 Back to Colleges
               </button>
+              <div>
+                <p className="text-sm font-semibold uppercase text-gray-500">Selected College</p>
+                <h2 className="text-2xl font-bold text-[#3a53a5]">{selectedCollege.name}</h2>
+              </div>
             </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -243,10 +299,6 @@ const StudentRecords = () => {
             <h2 className="text-xl font-semibold text-gray-900">Student List</h2>
             <div className="flex flex-col gap-3 md:flex-row">
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search students" className="h-10 w-full border border-gray-300 px-3 text-sm outline-none focus:border-[#3a53a5] md:w-64" />
-              <select value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)} className="h-10 border border-gray-300 px-3 text-sm outline-none focus:border-[#3a53a5]">
-                <option value="">Select Department</option>
-                {departments.map((department) => <option key={department} value={department}>{department}</option>)}
-              </select>
             </div>
           </div>
 
@@ -278,7 +330,7 @@ const StudentRecords = () => {
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{student.certificateCount || 0}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
                       <button onClick={() => openEdit(student)} className="mr-4 font-semibold text-[#3a53a5] hover:underline">Edit</button>
-                      <button onClick={() => handleDelete(student._id)} className="font-semibold text-red-600 hover:underline">Delete</button>
+                      <button onClick={() => setDeleteTarget(student)} className="font-semibold text-red-600 hover:underline">Delete</button>
                     </td>
                   </tr>
                 ))}
@@ -297,15 +349,13 @@ const StudentRecords = () => {
             <h2 className="mb-4 text-xl font-bold text-gray-900">{modal.mode === 'edit' ? 'Edit Student' : 'Add New Student'}</h2>
             <form onSubmit={handleSubmit} className="space-y-3">
               <input value={formData.studentId} onChange={(event) => setFormData({ ...formData, studentId: event.target.value })} disabled={modal.mode === 'edit'} placeholder="Student ID" className="h-10 w-full border px-3 disabled:bg-gray-100" />
-              <select value={formData.college} onChange={(event) => setFormData({ ...formData, college: event.target.value })} className="h-10 w-full border px-3">
-                <option value="">Select College</option>
-                {colleges.map((college) => <option key={college.value} value={college.value}>{college.name}</option>)}
-              </select>
+              <input value={selectedCollege?.name || formData.college} readOnly className="h-10 w-full border bg-gray-100 px-3 text-gray-600" />
               <select value={formData.department} onChange={(event) => setFormData({ ...formData, department: event.target.value })} className="h-10 w-full border px-3">
                 <option value="">Select Department</option>
-                {departments.map((department) => <option key={department} value={department}>{department}</option>)}
+                {getDepartmentOptions(selectedCollege || getCollegeForStudent({ ...modal.student, department: formData.department, college: formData.college })).map((department) => (
+                  <option key={department} value={department}>{department}</option>
+                ))}
               </select>
-              <input value={formData.major} onChange={(event) => setFormData({ ...formData, major: event.target.value })} placeholder="Major" className="h-10 w-full border px-3" />
               <input type="email" value={formData.email} onChange={(event) => setFormData({ ...formData, email: event.target.value })} placeholder="Email" className="h-10 w-full border px-3" />
               <input value={formData.firstName} onChange={(event) => setFormData({ ...formData, firstName: event.target.value })} placeholder="First Name" className="h-10 w-full border px-3" />
               <input value={formData.lastName} onChange={(event) => setFormData({ ...formData, lastName: event.target.value })} placeholder="Last Name" className="h-10 w-full border px-3" />
@@ -323,6 +373,30 @@ const StudentRecords = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
+              <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M4.93 19h14.14a2 2 0 001.73-3L13.73 4a2 2 0 00-3.46 0L3.2 16a2 2 0 001.73 3z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Delete Student Account?</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              This will remove {deleteTarget.fullName || `${deleteTarget.firstName || ''} ${deleteTarget.lastName || ''}`.trim() || 'this student'} from the student records.
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button type="button" onClick={handleDelete} className="bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                Delete Student
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -41,7 +41,7 @@ const Navbar = () => {
                 <span className="text-2xl font-bold text-white tracking-wide">
                   eCMS
                 </span>
-                <p className="text-xs text-yellow-400 -mt-1">Campus Ministry</p>
+                <p className="text-xs text-yellow-400 -mt-1">Campus Ministries</p>
               </div>
             </Link>
           </div>

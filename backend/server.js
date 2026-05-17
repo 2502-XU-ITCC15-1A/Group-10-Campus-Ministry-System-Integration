@@ -3,23 +3,25 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
-const User = require('./models/User');
+const User = require('./models/userSchema');
 const Recollection = require('./models/Recollection');
-const CmoEvent = require('./models/CmoEvent');
+const CmoEvent = require('./models/eventsSchema');
 
 dotenv.config();
 
 const app = express();
+const userRoutes = require('./routes/userRoutes');
 
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/admin', require('./routes/admin'));
-app.use('/api/faculty', require('./routes/faculty'));
-app.use('/api/formator', require('./routes/faculty'));
-app.use('/api/student', require('./routes/student'));
+app.use('/api/user', userRoutes);
+app.use('/api/admin', userRoutes.adminRouter);
+app.use('/api/faculty', userRoutes.facultyRouter);
+app.use('/api/formator', userRoutes.facultyRouter);
+app.use('/api/student', userRoutes.studentRouter);
 app.use('/api/evaluation', require('./routes/evaluation'));
 
 // Keep demo credentials usable even if older bad hashes already exist.
@@ -61,21 +63,28 @@ const seedUsers = async () => {
     );
     console.log('Test admin ready: dfabela@xu.edu.ph');
 
-    const studentHash = await bcrypt.hash('password123', 12);
+    const formatorHash = await bcrypt.hash('password123', 12);
     await User.findOneAndUpdate(
-      { studentId: '20230028369' },
+      { email: 'formator@xu.edu.ph' },
       {
-        email: '20230028369@my.xu.edu.ph',
-        password: studentHash,
-        role: 'student',
-        fullName: 'John Doe',
-        studentId: '20230028369',
+        email: 'formator@xu.edu.ph',
+        password: formatorHash,
+        role: 'staff',
+        fullName: 'Formator Adviser',
+        studentId: 'FAC001',
         department: 'Computer Studies',
-        batch: 'BSIT-1A'
+        batch: 'BSIT-1'
       },
       { upsert: true, new: true }
     );
-    console.log('Test student ready: 20230028369@my.xu.edu.ph');
+    console.log('Test formator ready: formator@xu.edu.ph');
+
+    await User.deleteMany({
+      $or: [
+        { studentId: { $in: ['20230028369', '20230028370', '20230028371'] } },
+        { email: { $in: ['20230028369@my.xu.edu.ph', '20230028370@my.xu.edu.ph', '20230028371@my.xu.edu.ph'] } }
+      ]
+    });
 
     console.log('Test users ready');
   } catch (error) {
@@ -106,7 +115,7 @@ const seedRecollections = async () => {
         venue: 'Xavier University Chapel',
         department: 'Computer Studies',
         yearLevel: '1',
-        facilitator: 'Campus Ministry Office',
+        facilitator: 'Campus Ministries Office',
         slots: 40
       },
       {
@@ -116,7 +125,7 @@ const seedRecollections = async () => {
         venue: 'AVR 1, Main Campus',
         department: 'Computer Studies',
         yearLevel: '2',
-        facilitator: 'Fr. Campus Ministry Team',
+        facilitator: 'Fr. Campus Ministries Team',
         slots: 35
       },
       {
@@ -126,7 +135,7 @@ const seedRecollections = async () => {
         venue: 'Little Theater',
         department: 'Computer Studies',
         yearLevel: '4',
-        facilitator: 'Campus Ministry Office',
+        facilitator: 'Campus Ministries Office',
         slots: 50
       }
     ];
@@ -163,7 +172,7 @@ const seedCmoEvents = async () => {
         batch: '1',
         yearLevel: '1',
         venue: 'Xavier University Chapel',
-        inCharge: 'Campus Ministry Office'
+        inCharge: 'Campus Ministries Office'
       },
       {
         eventDate: makeDate(10),
@@ -172,7 +181,7 @@ const seedCmoEvents = async () => {
         batch: '2',
         yearLevel: '2',
         venue: 'AVR 1',
-        inCharge: 'Campus Ministry Office'
+        inCharge: 'Campus Ministries Office'
       }
     ];
 

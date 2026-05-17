@@ -35,7 +35,7 @@ const AdminStudentProfile = () => {
       </h1>
 
       <div className="mx-6 rounded-lg bg-white p-6 shadow-lg lg:mx-9">
-        <button onClick={() => navigate(-1)} className="mb-6 flex items-center gap-2 text-sm font-semibold text-[#3a53a5] hover:underline">
+        <button onClick={() => navigate('/admin/student-records')} className="mb-6 flex items-center gap-2 text-sm font-semibold text-[#3a53a5] hover:underline">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
@@ -59,7 +59,6 @@ const AdminStudentProfile = () => {
               <div className="ml-5">
                 <h2 className="text-2xl font-bold text-gray-900">{studentData.studentName}</h2>
                 <p className="text-sm text-gray-700">{studentData.studentId} - {studentData.departmentYearStanding}</p>
-                <p className="text-sm text-gray-700">{studentData.major || 'No major recorded'}</p>
                 <button className={`mt-3 rounded px-4 py-2 text-sm font-semibold text-white ${statusClass}`} disabled>
                   {status}
                 </button>

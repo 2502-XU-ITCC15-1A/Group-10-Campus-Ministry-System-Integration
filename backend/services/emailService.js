@@ -19,7 +19,7 @@ const createTransporter = () => {
 
 const sendEmail = async ({ to, subject, text, html }) => {
   const transporter = createTransporter();
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'Campus Ministry <no-reply@xu.edu.ph>';
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'Campus Ministries <no-reply@xu.edu.ph>';
 
   if (!transporter) {
     console.log('[Email preview] SMTP is not configured. Email was not sent.');

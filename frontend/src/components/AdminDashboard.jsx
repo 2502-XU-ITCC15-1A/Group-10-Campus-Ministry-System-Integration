@@ -1,27 +1,77 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
 const emptyEvent = {
   eventDate: '',
+  college: '',
   department: '',
   description: '',
   batch: '',
   yearLevel: '',
   venue: '',
-  inCharge: ''
+  inCharge: '',
+  slots: 40
 };
 
-const departments = [
-  'Agriculture',
-  'Arts and Sciences',
-  'Computer Studies',
-  'Engineering',
-  'Nursing',
-  'Business and Management',
-  'Education',
-  'NSTP'
+const colleges = [
+  {
+    name: 'AGRICULTURE',
+    value: 'Agriculture',
+    departments: ['BS Agribusiness', 'BS Agriculture', 'BS Agricultural & Biosystems Engineering', 'BS Food Technology', 'BS Development Communication'],
+    legacyDepartments: ['Agriculture']
+  },
+  {
+    name: 'ARTS & SCIENCES',
+    value: 'Arts Science',
+    departments: ['AB Economics', 'AB History', 'AB Interdisciplinary Studies', 'AB International Studies', 'AB English Language', 'AB Literature', 'AB Philosophy', 'AB Psychology', 'AB Sociology', 'BS Biology', 'BS Chemistry', 'BS Marine Biology', 'BS Mathematics', 'BS Psychology'],
+    legacyDepartments: ['Arts and Science', 'Arts and Sciences']
+  },
+  {
+    name: 'BUSINESS MANAGEMENT',
+    value: 'Business Management',
+    departments: ['BS Accountancy', 'BS Business Administration', 'BS Management Accounting'],
+    legacyDepartments: ['Business Management']
+  },
+  {
+    name: 'COMPUTER STUDIES',
+    value: 'Computer Studies',
+    departments: ['BS Computer Science', 'BS Information Systems', 'BS Information Technology', 'BS Entertainment & Multimedia Computing'],
+    legacyDepartments: ['Computer Studies']
+  },
+  {
+    name: 'EDUCATION',
+    value: 'Education',
+    departments: ['Bachelor of Early Childhood Education', 'Bachelor of Elementary Education', 'Bachelor of Special Needs Education', 'Bachelor of Technology and Livelihood Education', 'Bachelor of Secondary Education'],
+    legacyDepartments: ['Education']
+  },
+  {
+    name: 'ENGINEERING',
+    value: 'Engineering',
+    departments: ['BS Chemical Engineering', 'BS Civil Engineering', 'BS Electrical Engineering', 'BS Electronics Engineering', 'BS Industrial Engineering', 'BS Mechanical Engineering'],
+    legacyDepartments: ['Engineering', 'BS Civil Engineerring']
+  },
+  {
+    name: 'NURSING',
+    value: 'Nursing',
+    departments: ['BS Nursing'],
+    legacyDepartments: ['Nursing']
+  }
 ];
+
+const getCollegeByValue = (value) => colleges.find((college) => college.value === value);
+
+const getCollegeForDepartment = (department) => colleges.find((college) => (
+  college.departments.includes(department) || (college.legacyDepartments || []).includes(department)
+));
+
+const toDateTimeLocalValue = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+};
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState({
@@ -31,10 +81,11 @@ const AdminDashboard = () => {
     eventsThisMonth: 0
   });
   const [events, setEvents] = useState([]);
+  const [formators, setFormators] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const [dateFilters, setDateFilters] = useState({ startDate: '', endDate: '' });
+  const [selectedDate, setSelectedDate] = useState('');
   const [modal, setModal] = useState({ open: false, mode: 'add', event: null });
   const [formData, setFormData] = useState(emptyEvent);
 
@@ -42,23 +93,24 @@ const AdminDashboard = () => {
     try {
       const params = new URLSearchParams();
       if (search.trim()) params.append('keyword', search.trim());
-      if (dateFilters.startDate) params.append('startDate', dateFilters.startDate);
-      if (dateFilters.endDate) params.append('endDate', dateFilters.endDate);
+      if (selectedDate) params.append('date', selectedDate);
       params.append('limit', '100');
 
-      const [statsRes, eventsRes] = await Promise.all([
+      const [statsRes, eventsRes, formatorRes] = await Promise.all([
         api.get('/admin/dashboard-cards'),
-        api.get(`/admin/events?${params.toString()}`)
+        api.get(`/admin/events?${params.toString()}`),
+        api.get('/admin/formators')
       ]);
 
       setStats(statsRes.data || {});
       setEvents(eventsRes.data?.data || []);
+      setFormators(formatorRes.data || []);
     } catch (error) {
       toast.error('Failed to load admin dashboard');
     } finally {
       setLoading(false);
     }
-  }, [search, dateFilters.startDate, dateFilters.endDate]);
+  }, [search, selectedDate]);
 
   useEffect(() => {
     fetchDashboard();
@@ -68,7 +120,7 @@ const AdminDashboard = () => {
     ['Active Students', stats.totalStudents || 0, 'M10 10a4 4 0 100-8 4 4 0 000 8zM3 18a7 7 0 1114 0H3z'],
     ['Active Certificates', stats.totalCertificates || 0, 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'],
     ['Events - Next Week', stats.eventsNextWeek || 0, 'M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1z'],
-    ['Events - This Month', stats.eventsThisMonth || 0, 'M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v2h16V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1z']
+    ['Events - This Month', stats.eventsThisMonth || 0, 'M3 4a2 2 0 012-2h1V1a1 1 0 112 0v1h4V1a1 1 0 112 0v1h1a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V4zm2 4v8h10V8H5zm2 2h2v2H7v-2zm4 0h2v2h-2v-2z']
   ];
 
   const openAddModal = () => {
@@ -77,14 +129,17 @@ const AdminDashboard = () => {
   };
 
   const openEditModal = (event) => {
+    const eventCollege = getCollegeForDepartment(event.department);
     setFormData({
-      eventDate: event.eventDate ? new Date(event.eventDate).toISOString().slice(0, 10) : '',
+      eventDate: toDateTimeLocalValue(event.eventDate),
+      college: eventCollege?.value || '',
       department: event.department || '',
       description: event.description || '',
       batch: event.batch || '',
       yearLevel: event.yearLevel || '',
       venue: event.venue || '',
-      inCharge: event.inCharge || ''
+      inCharge: event.inCharge || '',
+      slots: event.slots ?? 40
     });
     setModal({ open: true, mode: 'edit', event });
   };
@@ -105,11 +160,12 @@ const AdminDashboard = () => {
 
     setSaving(true);
     try {
+      const { college, ...payload } = formData;
       if (modal.mode === 'edit' && modal.event?._id) {
-        await api.put(`/admin/events/${modal.event._id}`, formData);
+        await api.put(`/admin/events/${modal.event._id}`, payload);
         toast.success('Event updated successfully');
       } else {
-        await api.post('/admin/events', formData);
+        await api.post('/admin/events', payload);
         toast.success('Event created successfully');
       }
       closeModal();
@@ -133,6 +189,10 @@ const AdminDashboard = () => {
   };
 
   const filteredEvents = useMemo(() => events, [events]);
+  const selectedCollege = getCollegeByValue(formData.college);
+  const departmentOptions = selectedCollege
+    ? [...(selectedCollege.legacyDepartments || []), ...selectedCollege.departments]
+    : [];
 
   if (loading) {
     return (
@@ -188,14 +248,8 @@ const AdminDashboard = () => {
               />
               <input
                 type="date"
-                value={dateFilters.startDate}
-                onChange={(event) => setDateFilters((current) => ({ ...current, startDate: event.target.value }))}
-                className="h-10 border border-gray-300 px-3 text-sm outline-none focus:border-[#3a53a5]"
-              />
-              <input
-                type="date"
-                value={dateFilters.endDate}
-                onChange={(event) => setDateFilters((current) => ({ ...current, endDate: event.target.value }))}
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
                 className="h-10 border border-gray-300 px-3 text-sm outline-none focus:border-[#3a53a5]"
               />
             </div>
@@ -205,7 +259,7 @@ const AdminDashboard = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Date', 'Department', 'Description', 'Batch', 'Year Level', 'Venue', 'Person in Charge', 'Actions'].map((heading) => (
+                  {['Date', 'Department', 'Description', 'Batch', 'Year Level', 'Venue', 'Slots', 'Person in Charge', 'Actions'].map((heading) => (
                     <th key={heading} className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                       {heading}
                     </th>
@@ -215,14 +269,24 @@ const AdminDashboard = () => {
               <tbody className="divide-y divide-gray-200 bg-white">
                 {filteredEvents.map((event) => (
                   <tr key={event._id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{new Date(event.eventDate).toLocaleDateString()}</td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                      {new Date(event.eventDate).toLocaleString([], {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })}
+                    </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{event.department}</td>
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900">{event.description}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{event.batch}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{event.yearLevel}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{event.venue}</td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{event.slots ?? 40}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{event.inCharge}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <Link to={`/admin/recollections/${event._id}/registrants`} className="mr-4 font-semibold text-[#3a53a5] hover:underline">Registrants</Link>
                       <button onClick={() => openEditModal(event)} className="mr-4 font-semibold text-[#3a53a5] hover:underline">Edit</button>
                       <button onClick={() => handleDelete(event._id)} className="font-semibold text-red-600 hover:underline">Delete</button>
                     </td>
@@ -244,10 +308,23 @@ const AdminDashboard = () => {
               {modal.mode === 'edit' ? 'Edit Event' : 'Add New Event'}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-3">
-              <input type="date" value={formData.eventDate} onChange={(event) => setFormData({ ...formData, eventDate: event.target.value })} className="h-10 w-full border px-3" />
-              <select value={formData.department} onChange={(event) => setFormData({ ...formData, department: event.target.value })} className="h-10 w-full border px-3">
+              <input type="datetime-local" value={formData.eventDate} onChange={(event) => setFormData({ ...formData, eventDate: event.target.value })} className="h-10 w-full border px-3" />
+              <select
+                value={formData.college}
+                onChange={(event) => setFormData({ ...formData, college: event.target.value, department: '' })}
+                className="h-10 w-full border px-3"
+              >
+                <option value="">Select College</option>
+                {colleges.map((college) => <option key={college.value} value={college.value}>{college.name}</option>)}
+              </select>
+              <select
+                value={formData.department}
+                onChange={(event) => setFormData({ ...formData, department: event.target.value })}
+                disabled={!formData.college}
+                className="h-10 w-full border px-3 disabled:bg-gray-100 disabled:text-gray-500"
+              >
                 <option value="">Select Department</option>
-                {departments.map((department) => <option key={department} value={department}>{department}</option>)}
+                {departmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
               </select>
               <input placeholder="Description" value={formData.description} onChange={(event) => setFormData({ ...formData, description: event.target.value })} className="h-10 w-full border px-3" />
               <select value={formData.batch} onChange={(event) => setFormData({ ...formData, batch: event.target.value })} className="h-10 w-full border px-3">
@@ -263,7 +340,15 @@ const AdminDashboard = () => {
                 <option value="4">4th</option>
               </select>
               <input placeholder="Venue" value={formData.venue} onChange={(event) => setFormData({ ...formData, venue: event.target.value })} className="h-10 w-full border px-3" />
-              <input placeholder="Person in Charge" value={formData.inCharge} onChange={(event) => setFormData({ ...formData, inCharge: event.target.value })} className="h-10 w-full border px-3" />
+              <input type="number" min="0" placeholder="Available Slots" value={formData.slots} onChange={(event) => setFormData({ ...formData, slots: event.target.value })} className="h-10 w-full border px-3" />
+              <input list="formator-options" placeholder="Person in Charge" value={formData.inCharge} onChange={(event) => setFormData({ ...formData, inCharge: event.target.value })} className="h-10 w-full border px-3" />
+              <datalist id="formator-options">
+                {formators.map((formator) => (
+                  <option key={formator._id} value={formator.fullName || formator.email}>
+                    {formator.email}
+                  </option>
+                ))}
+              </datalist>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={closeModal} className="bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600">Cancel</button>
                 <button type="submit" disabled={saving} className="bg-[#3a53a5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2a3a85] disabled:opacity-60">

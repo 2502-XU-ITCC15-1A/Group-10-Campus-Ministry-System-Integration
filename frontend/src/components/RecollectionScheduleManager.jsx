@@ -22,13 +22,51 @@ const RecollectionScheduleManager = () => {
   });
 
   const departments = [
-    'Nursing',
-    'Computer Studies',
-    'Engineering',
     'Agriculture',
+    'Arts and Science',
     'Business Management',
+    'Computer Studies',
     'Education',
-    'Arts and Science'
+    'Engineering',
+    'Nursing',
+    'BS Agribusiness',
+    'BS Agriculture',
+    'BS Agricultural & Biosystems Engineering',
+    'BS Food Technology',
+    'BS Development Communication',
+    'AB Economics',
+    'AB History',
+    'AB Interdisciplinary Studies',
+    'AB International Studies',
+    'AB English Language',
+    'AB Literature',
+    'AB Philosophy',
+    'AB Psychology',
+    'AB Sociology',
+    'BS Biology',
+    'BS Chemistry',
+    'BS Marine Biology',
+    'BS Mathematics',
+    'BS Psychology',
+    'BS Accountancy',
+    'BS Business Administration',
+    'BS Management Accounting',
+    'BS Computer Science',
+    'BS Information Systems',
+    'BS Information Technology',
+    'BS Entertainment & Multimedia Computing',
+    'Bachelor of Early Childhood Education',
+    'Bachelor of Elementary Education',
+    'Bachelor of Special Needs Education',
+    'Bachelor of Technology and Livelihood Education',
+    'Bachelor of Secondary Education',
+    'BS Chemical Engineering',
+    'BS Civil Engineering',
+    'BS Electrical Engineering',
+    'BS Electronics Engineering',
+    'BS Industrial Engineering',
+    'BS Mechanical Engineering',
+    'BS Nursing'
   ];
 
   const yearLevelLabels = {
@@ -172,7 +210,7 @@ const RecollectionScheduleManager = () => {
                 name="facilitator"
                 value={formData.facilitator}
                 onChange={handleChange}
-                placeholder="Campus Ministry Office"
+                placeholder="Campus Ministries Office"
                 className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
               />
             </div>
